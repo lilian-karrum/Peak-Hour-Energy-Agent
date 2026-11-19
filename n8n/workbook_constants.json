@@ -1,0 +1,142 @@
+{
+ "Site_Parameters": [
+  {
+   "parameter": "Location",
+   "value": "Industrial area, hot desert climate (synthetic weather)",
+   "unit / note": null
+  },
+  {
+   "parameter": "Production floor comfort band",
+   "value": "20 - 27",
+   "unit / note": "deg C (hard constraint)"
+  },
+  {
+   "parameter": "Chillers",
+   "value": "4 x 1,200",
+   "unit / note": "kW thermal; at least one must stay on standby (not running)"
+  },
+  {
+   "parameter": "Ice thermal storage capacity",
+   "value": "9000",
+   "unit / note": "kWh thermal"
+  },
+  {
+   "parameter": "Ice tank max charge rate",
+   "value": "1500",
+   "unit / note": "kW thermal (only chillers CH-1 and CH-2 can make ice)"
+  },
+  {
+   "parameter": "Ice tank max discharge rate",
+   "value": "1800",
+   "unit / note": "kW thermal"
+  },
+  {
+   "parameter": "Ice tank standing loss",
+   "value": "0.5",
+   "unit / note": "% of stored energy per hour"
+  },
+  {
+   "parameter": "Rooftop solar PV",
+   "value": "1500",
+   "unit / note": "kWp"
+  },
+  {
+   "parameter": "Extrusion presses",
+   "value": "3 (EP-1, EP-2, EP-3)",
+   "unit / note": "1,100 kW electric and 380 kW heat to the floor each while running"
+  },
+  {
+   "parameter": "Base electrical load (lighting, compressed air, offices)",
+   "value": "650",
+   "unit / note": "kW, roughly constant"
+  },
+  {
+   "parameter": "Building heat gain",
+   "value": "cooling load = 520 + 46 x (outdoor - 24 C) + 0.25 x solar W/m2 + 380 per running press",
+   "unit / note": "kW thermal (used to make the data)"
+  },
+  {
+   "parameter": "Floor temperature response",
+   "value": "rises ~0.6 C per hour for every 100 kW of unmet cooling",
+   "unit / note": "approximate"
+  }
+ ],
+ "Chillers": [
+  {
+   "chiller_id": "CH-1",
+   "capacity_kwth": 1200,
+   "rated_cop": 5.6,
+   "min_part_load": 0.25,
+   "ice_mode_capable": true,
+   "ice_mode_cop_factor": 0.72
+  },
+  {
+   "chiller_id": "CH-2",
+   "capacity_kwth": 1200,
+   "rated_cop": 5.4,
+   "min_part_load": 0.25,
+   "ice_mode_capable": true,
+   "ice_mode_cop_factor": 0.72
+  },
+  {
+   "chiller_id": "CH-3",
+   "capacity_kwth": 1200,
+   "rated_cop": 5.1,
+   "min_part_load": 0.25,
+   "ice_mode_capable": false,
+   "ice_mode_cop_factor": null
+  },
+  {
+   "chiller_id": "CH-4",
+   "capacity_kwth": 1200,
+   "rated_cop": 4.8,
+   "min_part_load": 0.25,
+   "ice_mode_capable": false,
+   "ice_mode_cop_factor": null
+  }
+ ],
+ "Tariff": [
+  {
+   "season": "Summer (May-Oct)",
+   "band": "peak",
+   "hours": "12:00-18:00",
+   "rate_aed_per_kwh": 0.62
+  },
+  {
+   "season": "Summer (May-Oct)",
+   "band": "shoulder",
+   "hours": "07:00-12:00 and 18:00-23:00",
+   "rate_aed_per_kwh": 0.38
+  },
+  {
+   "season": "Summer (May-Oct)",
+   "band": "off-peak",
+   "hours": "23:00-07:00",
+   "rate_aed_per_kwh": 0.23
+  },
+  {
+   "season": "Winter (Nov-Apr)",
+   "band": "standard",
+   "hours": "07:00-23:00",
+   "rate_aed_per_kwh": 0.3
+  },
+  {
+   "season": "Winter (Nov-Apr)",
+   "band": "off-peak",
+   "hours": "23:00-07:00",
+   "rate_aed_per_kwh": 0.22
+  },
+  {
+   "season": "All year",
+   "band": "demand charge",
+   "hours": "highest 30-min import in the month",
+   "rate_aed_per_kwh": "45 AED per kW per month"
+  },
+  {
+   "season": "All year",
+   "band": "solar export",
+   "hours": "export to grid",
+   "rate_aed_per_kwh": "0 (no payment; self-consume solar)"
+  }
+ ]
+}

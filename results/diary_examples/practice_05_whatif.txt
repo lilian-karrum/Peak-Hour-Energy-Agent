@@ -1,0 +1,5 @@
+Option | Energy AED | Demand AED | Total AED | Peak kW | Floor max (+1°C) | Late | Press hrs in peak | Valid
+A Recommended | 13187 | 5469 | 18656 | 3768 | 24 | 0 | 1 | yes
+B Max savings | 13187 | 5469 | 18656 | 3768 | 24 | 0 | 1 | yes
+C Extra safe | 13240 | 6169 | 19409 | 4250 | 24 | 0 | 1 | yes
+D Do nothing (reference) | 15602 | 5469 | 21071 | 3768 | 24.2 | 0 | 6 | yes

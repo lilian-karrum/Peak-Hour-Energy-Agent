@@ -1,0 +1,55 @@
+{
+  "id": "PHEADRWebhook001",
+  "name": "Peak Hour Energy Agent - Demand-Response Webhook",
+  "nodes": [
+    {
+      "id": "utility_dr_signal_0",
+      "name": "Utility DR Signal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "phea-demand-response",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "phea-demand-response"
+    },
+    {
+      "id": "validate___queue_dr_request_1",
+      "name": "Validate & Queue DR Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Body: {\"start\":\"18:00\",\"end\":\"21:00\",\"cap_kw\":1200,\"id\":\"DR-123\"}. Only these numeric/time fields are read.\n// NOTE: n8n keeps static data per workflow; with the Day Agent this request is read from the agent's queue when both run in production\n// (simulator testing passes dr_events through Config instead).\nconst b = ($input.first().json || {}).body || {};\nconst t = v => /^\\d{1,2}:\\d\\d$/.test(String(v || '')) ? String(v) : null;\nconst req = { start: t(b.start), end: t(b.end), cap_kw: Number(b.cap_kw), id: String(b.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'DR' };\nif (!req.start || !req.end || !(req.cap_kw > 0)) return [{ json: { accepted: false, reason: 'need start, end (HH:MM) and cap_kw > 0' } }];\nconst sd = $getWorkflowStaticData('global'); sd.drInbox = (sd.drInbox || []).concat([req]);\nreturn [{ json: { accepted: true, queued: req } }];"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Utility DR Signal": {
+      "main": [
+        [
+          {
+            "node": "Validate & Queue DR Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

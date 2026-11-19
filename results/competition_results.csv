@@ -1,0 +1,4 @@
+day,cost_aed,baseline_cost_aed,saving_pct,peak_kw,baseline_peak_kw,comfort_violation_minutes,late_orders,violations,error
+DAY1,,,,,,,0,0,<urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>
+DAY2,,,,,,,0,0,<urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>
+DAY3,,,,,,,0,0,<urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>

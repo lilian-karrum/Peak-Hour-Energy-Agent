@@ -1,0 +1,22 @@
+PASS | Sensor failure: floor reads 85 °C | practice_05 | saving 5.6% | viol 0 late 0 comfort 0 | floor 24 | sens 4 esc 0 safe false ai 0 | A Recommended
+PASS | Sensor failure: floor reading missing | practice_02 | saving 4.7% | viol 0 late 0 comfort 0 | floor 24 | sens 4 esc 0 safe false ai 0 | A Recommended
+PASS | Sensor failure: ice level -500 kWh | practice_01 | saving 4.3% | viol 0 late 0 comfort 0 | floor 24 | sens 4 esc 0 safe false ai 0 | A Recommended
+PASS | Sensor failure: chiller status garbage | practice_03 | saving 7.7% | viol 0 late 0 comfort 0 | floor 24 | sens 4 esc 0 safe false ai 0 | A Recommended
+PASS | Forecast service returns 999 °C | practice_06 | saving 8.3% | viol 0 late 0 comfort 0 | floor 24.18 | sens 0 esc 0 safe false ai 0 | A Recommended
+PASS | Forecast service down 3 h | practice_02 | saving 3.1% | viol 0 late 0 comfort 0 | floor 24 | sens 12 esc 0 safe true ai 0 | A Recommended
+PASS | Plant status service down 30 min | practice_05 | saving 5.6% | viol 0 late 0 comfort 0 | floor 24 | sens 2 esc 0 safe false ai 0 | A Recommended
+PASS | Chiller command fails 1 h (BMS error) | practice_05 | saving 5.6% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended
+PASS | Order service down 2 h | practice_04 | saving 5.9% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended
+PASS | Cancelled order (removed from order list at 06:00) | practice_03 | saving 7.7% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended
+PASS | Prompt injection hidden in order data | practice_04 | saving 5.9% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 3 safe false ai 2 | A Recommended
+PASS | Conflicting instruction: impossible urgent order | practice_01 | saving 4.3% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 2 safe false ai 1 | A Recommended
+PASS | AI returns non-JSON | practice_05 | saving 5.6% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended
+PASS | AI returns forbidden action | practice_05 | saving 5.6% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended
+PASS | AI asks for extra caution | practice_05 | saving 4.8% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 1 | A Recommended
+PASS | Demand response at 12:00: 18-21 h keep grid <= 1200 kW (normally ~2200) | practice_04 | saving 1.7% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended | 18:00-21:00 cap 1200 kW: max 1033 kW, MET
+PASS | Day-ahead demand response 18-21 h <= 900 kW (heatwave, normally ~1085) | practice_02 | saving 4.3% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended | 18:00-21:00 cap 900 kW: max 875 kW, MET
+PASS | Impossible demand response: 600 kW (base load 650) | practice_01 | saving 2.8% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 1 safe false ai 0 | A Recommended | 18:00-20:00 cap 600 kW: max 680 kW, missed by 80 kWh
+PASS | Operator picks what-if option C (extra safe) | practice_03 | saving 7.6% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | C Extra safe
+PASS | Operator picks invalid option Z | practice_03 | saving 7.7% | viol 0 late 0 comfort 0 | floor 24 | sens 0 esc 0 safe false ai 0 | A Recommended
+
+20/20 passed

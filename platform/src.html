@@ -1,0 +1,776 @@
+<title>Peak Hour Energy Control</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a plant control room. Sticky command bar (scenario + clock), five views that share one 24-hour playhead. */
+:root{
+  --bg:#ECF0EE; --panel:#FFFFFF; --panel2:#F5F8F6; --ink:#12201B; --ink2:#46564F; --ink3:#78877F; --line:#D3DCD7;
+  --accent:#0E7C69; --accent-ink:#FFFFFF; --peak:#C8410B; --peakbg:rgba(200,65,11,.07); --ice:#1A6FC4; --solar:#C98A00; --gridc:#2C3A34; --base:#98A39E;
+  --ok:#2B8A3E; --warn:#C26A00; --bad:#C42525; --idle:#8D9C95; --run:#16A34A; --future:rgba(236,240,238,.62);
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif; --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C1311; --panel:#131C19; --panel2:#18231F; --ink:#E4EDE8; --ink2:#A6B6AE; --ink3:#72837B; --line:#26332E;
+  --accent:#2BC2A3; --accent-ink:#06201A; --peak:#FF7D45; --peakbg:rgba(255,125,69,.08); --ice:#4FA8F5; --solar:#F5BE32; --gridc:#C6D2CC; --base:#66736D;
+  --ok:#51CF66; --warn:#FFA94D; --bad:#FF6B6B; --idle:#5B6B64; --run:#3BD16F; --future:rgba(12,19,17,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C1311; --panel:#131C19; --panel2:#18231F; --ink:#E4EDE8; --ink2:#A6B6AE; --ink3:#72837B; --line:#26332E;
+  --accent:#2BC2A3; --accent-ink:#06201A; --peak:#FF7D45; --peakbg:rgba(255,125,69,.08); --ice:#4FA8F5; --solar:#F5BE32; --gridc:#C6D2CC; --base:#66736D;
+  --ok:#51CF66; --warn:#FFA94D; --bad:#FF6B6B; --idle:#5B6B64; --run:#3BD16F; --future:rgba(12,19,17,.6); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font:15px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1360px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;letter-spacing:.01em;margin:0;text-wrap:balance}
+.eyebrow{font:500 11px/1 var(--f-body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+
+/* command bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar-top{display:flex;align-items:center;gap:14px;padding-block:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{flex:none}
+.brand h1{font-size:22px;line-height:1}
+.brand .sub{font-size:12px;color:var(--ink3)}
+.spacer{flex:1}
+.scen-pick{display:flex;align-items:center;gap:8px}
+.scen-pick select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;max-width:260px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.badge.live .dot{background:var(--run);box-shadow:0 0 0 3px color-mix(in srgb,var(--run) 25%,transparent)}
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tabs a{padding:9px 14px 10px;color:var(--ink2);text-decoration:none;font:600 14px/1 var(--f-body);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs a[aria-current="page"]{color:var(--ink);border-color:var(--accent)}
+.tabs a:hover{color:var(--ink)}
+.play{display:flex;align-items:center;gap:12px;padding-block:8px;border-top:1px solid var(--line);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600;font-size:14px}
+.btn:hover{border-color:var(--ink3)}
+.btn{text-decoration:none;color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.clock{font:600 26px/1 var(--f-mono);min-width:76px}
+.scrub{flex:1;min-width:180px;accent-color:var(--accent)}
+.band-chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+.band-chip.peak{color:var(--peak);border-color:color-mix(in srgb,var(--peak) 45%,transparent);background:var(--peakbg)}
+.speed{display:flex;gap:2px}
+.speed button{border:1px solid var(--line);background:transparent;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;color:var(--ink2)}
+.speed button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+main{padding-block:18px 48px}
+@media (max-width:700px){.bar{position:relative;top:0}.brand .sub,.scen-pick label{display:none}.brand h1{font-size:19px}.view-head h2{font-size:26px}}
+.view-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.view-head h2{font-size:30px;line-height:1.05}
+.view-head p{margin:4px 0 0;color:var(--ink2);max-width:72ch}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.panel h3{font-size:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel .ph{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.legend i.box{height:10px;width:10px;border-radius:2px}
+.muted{color:var(--ink3)}
+.small{font-size:12.5px}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;min-width:0}
+.kpi .v{font:600 24px/1.1 var(--f-mono);margin-top:6px;white-space:nowrap}
+.kpi .v small{font-size:13px;color:var(--ink3);font-weight:500;margin-left:3px}
+.kpi .d{font-size:12px;color:var(--ink3);margin-top:3px}
+.kpi.good .v{color:var(--ok)}
+.kpi.hot{border-color:color-mix(in srgb,var(--peak) 40%,var(--line))}
+@media (max-width:1200px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .v{font-size:20px}}
+
+.grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;align-items:start}
+.grid-even{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px;align-items:start}
+@media (max-width:820px){.grid-even{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (max-width:980px){.grid2{grid-template-columns:minmax(0,1fr)}}
+
+/* charts */
+.chart{width:100%;height:auto;display:block;overflow:visible;touch-action:pan-y}
+.chart text{font:11px var(--f-mono);fill:var(--ink3)}
+.chart .gl{stroke:var(--line);stroke-width:1}
+.chart .peakband{fill:var(--peakbg)}
+.chart .bandlbl{fill:var(--peak);font:600 10px var(--f-body);letter-spacing:.1em}
+.chart .fut{fill:var(--future)}
+.chart .phl{stroke:var(--ink);stroke-width:1.5}
+.chart .hvl{stroke:var(--ink3);stroke-width:1;stroke-dasharray:3 3}
+.chart .halo{paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+.tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font:12px/1.4 var(--f-mono);padding:7px 9px;border-radius:7px;max-width:280px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.tip b{font-family:var(--f-body)}
+
+/* plant-now list */
+.eq{display:grid;gap:6px}
+.eq-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;background:var(--panel2);font-size:14px}
+.eq-row .nm{font:600 14px var(--f-mono);width:44px}
+.eq-row .ex{color:var(--ink3);font-size:12.5px;margin-left:auto;text-align:right}
+.chip{display:inline-flex;align-items:center;gap:5px;font:600 11.5px/1 var(--f-body);letter-spacing:.04em;text-transform:uppercase;padding:4px 7px;border-radius:5px;white-space:nowrap}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-run{color:var(--run);background:color-mix(in srgb,var(--run) 13%,transparent)}
+.st-idle{color:var(--ink2);background:color-mix(in srgb,var(--idle) 18%,transparent)}
+.st-standby{color:var(--ink2);background:color-mix(in srgb,var(--idle) 18%,transparent)}
+.st-bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
+.st-ice{color:var(--ice);background:color-mix(in srgb,var(--ice) 14%,transparent)}
+.st-warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.gauge{height:10px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.gauge > div{height:100%;background:var(--ice);transition:width .25s}
+.sec-title{font:600 12px var(--f-body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin:12px 0 6px}
+
+/* feed */
+.feed{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;padding-right:4px}
+.fi{border-left:3px solid var(--line);padding:2px 0 2px 10px;font-size:13.5px}
+.fi .t{font:500 12px var(--f-mono);color:var(--ink3)}
+.fi.ai{border-color:var(--accent)}
+.fi.alert{border-color:var(--peak)}
+.fi.esc{border-color:var(--bad)}
+.fi .why{color:var(--ink2)}
+
+/* twin */
+.twin-wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+@media (max-width:1050px){.twin-wrap{grid-template-columns:minmax(0,1fr)}}
+.twin-scroll{overflow-x:auto}
+.twin{width:100%;min-width:640px;height:auto;display:block}
+.twin text{font-family:var(--f-body);fill:var(--ink2)}
+.twin .lbl{font:600 13px var(--f-display);letter-spacing:.06em;fill:var(--ink)}
+.twin .val{font:500 12px var(--f-mono);fill:var(--ink2)}
+.twin .big{font:600 22px var(--f-mono);fill:var(--ink)}
+.twin .hit{cursor:pointer}
+.twin .hit:hover .body,.twin .sel .body{stroke:var(--accent);stroke-width:2.5}
+.twin .body{fill:var(--panel2);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s}
+.twin .run .body{fill:color-mix(in srgb,var(--run) 16%,var(--panel));stroke:var(--run)}
+.twin .bad .body{fill:color-mix(in srgb,var(--bad) 16%,var(--panel));stroke:var(--bad)}
+.twin .idle .body{fill:var(--panel2);stroke:var(--idle)}
+.twin .fan{stroke:var(--idle);stroke-width:3;fill:none;transform-box:fill-box;transform-origin:center}
+.twin .run .fan{stroke:var(--run);animation:spin 1.1s linear infinite}
+.twin .bad .fan{stroke:var(--bad)}
+.twin .x{display:none;stroke:var(--bad);stroke-width:4}
+.twin .bad .x{display:inline}
+.twin .billet{fill:var(--panel2);transition:fill .3s}
+.twin .run .billet{fill:var(--peak);animation:glow 1.4s ease-in-out infinite}
+.twin .ram{fill:var(--idle);transition:transform .3s}
+.twin .run .ram{fill:var(--ink2);animation:press 2.2s ease-in-out infinite}
+.twin .pipe{fill:none;stroke:var(--line);stroke-width:7;stroke-linecap:round}
+.twin .flow{fill:none;stroke-width:3;stroke-linecap:round;stroke-dasharray:6 10;opacity:0;transition:opacity .3s}
+.twin .flow.on{opacity:1;animation:flow 0.9s linear infinite}
+.twin .flow.cold{stroke:var(--ice)}
+.twin .flow.pow{stroke:var(--gridc)}
+.twin .flow.sun{stroke:var(--solar)}
+.twin .panelcell{fill:color-mix(in srgb,var(--ice) 20%,var(--panel));stroke:var(--ink3);stroke-width:1}
+.twin .sunon .panelcell{fill:color-mix(in srgb,var(--solar) 45%,var(--panel))}
+.twin .hall{fill:var(--panel);stroke:var(--ink3);stroke-width:1.5}
+.twin .tankfill{fill:color-mix(in srgb,var(--ice) 55%,var(--panel));transition:y .3s,height .3s}
+.twin .tankbody{fill:var(--panel2);stroke:var(--ice);stroke-width:2}
+.twin .thermo{fill:var(--ok);transition:height .3s,y .3s}
+.twin .thermo.hot{fill:var(--bad)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes flow{to{stroke-dashoffset:-32}}
+@keyframes glow{50%{opacity:.6}}
+@keyframes press{50%{transform:translateY(10px)}}
+@media (prefers-reduced-motion: reduce){.twin *{animation:none!important}}
+.det dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:8px 0 0;font-size:14px}
+.det dt{color:var(--ink3)}
+.det dd{margin:0;font-family:var(--f-mono);font-size:13px}
+.now-box{border-radius:8px;background:var(--panel2);padding:10px 12px;font-size:13.5px}
+.now-box b{font-weight:600}
+.leg2{display:flex;gap:8px;flex-wrap:wrap}
+
+/* what-if */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.sc{display:flex;flex-direction:column;gap:6px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;cursor:pointer;min-width:0}
+.sc:hover{border-color:var(--ink3)}
+.sc[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.sc .top{display:flex;align-items:center;gap:8px}
+.sc .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--panel2);color:var(--accent);flex:none}
+.sc h4{margin:0;font:600 17px/1.1 var(--f-display)}
+.sc p{margin:0;font-size:13px;color:var(--ink2)}
+.sc .res{font:500 12px var(--f-mono);color:var(--ink3);margin-top:auto}
+.runbox{margin-top:14px}
+.progress{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
+.progress div{height:100%;background:var(--accent);width:0}
+.outcome{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
+@media (max-width:700px){.outcome{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font:600 11.5px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--f-mono)}
+tr.chosen td{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.resp{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto}
+.resp .r{display:grid;grid-template-columns:52px 1fr;gap:8px;font-size:13.5px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.resp .r .t{font:500 12px var(--f-mono);color:var(--ink3);padding-top:2px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;align-items:end}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink2)}
+.form select,.form input{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.note{font-size:12.5px;color:var(--ink3);margin-top:8px}
+
+/* compare */
+.cmp-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+@media (max-width:800px){.cmp-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cmp-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+@media (max-width:820px){.cmp-row{grid-template-columns:minmax(0,1fr)}}
+.side-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.side-h .sw{width:10px;height:10px;border-radius:2px}
+.readout{font:500 13px var(--f-mono);color:var(--ink2);padding:8px 12px;border-radius:8px;background:var(--panel2);margin-bottom:14px;min-height:36px}
+.delta{font:600 13px var(--f-mono)}
+.delta.good{color:var(--ok)} .delta.bad{color:var(--bad)}
+
+/* timeline */
+.lanes{width:100%;min-width:720px;height:auto;display:block}
+.lanes text{font:12px var(--f-body);fill:var(--ink2)}
+.lanes .ln{font:600 12px var(--f-body);letter-spacing:.06em;text-transform:uppercase;fill:var(--ink3)}
+.lanes .mk{cursor:pointer}
+.lanes .mk:hover,.lanes .mk.sel{stroke:var(--ink);stroke-width:2}
+.chain{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:860px){.chain{grid-template-columns:minmax(0,1fr)}}
+.step{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:var(--panel);position:relative;min-width:0}
+.step .n{font:600 11px var(--f-body);letter-spacing:.1em;text-transform:uppercase}
+.step .body{font-size:13.5px;margin-top:6px;overflow-wrap:anywhere}
+.step.detect .n{color:var(--peak)} .step.ai .n{color:var(--accent)} .step.val .n{color:var(--ok)} .step.exe .n{color:var(--ice)}
+.step.none{opacity:.6}
+.filters{display:flex;gap:6px}
+.fbtn{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 11px;font-size:13px;cursor:pointer}
+.fbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tl-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.tl-item{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);cursor:pointer;text-align:left}
+.tl-item:hover{border-color:var(--ink3)}
+.tl-item .t{font:600 14px var(--f-mono)}
+.tl-item .s{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:13px}
+@media (max-width:860px){.tl-item .s{grid-template-columns:minmax(0,1fr)}}
+.tl-item .s span b{display:block;font:600 10.5px var(--f-body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.foot{margin-top:28px;font-size:12.5px;color:var(--ink3);max-width:100ch}
+</style>
+
+<div class="bar">
+  <div class="wrap bar-top">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="1" y="1" width="32" height="32" rx="8" fill="var(--accent)"/><path d="M19 5 9 19h7l-2 10 11-15h-7z" fill="var(--accent-ink)"/></svg>
+      <div><h1>Peak Hour Energy Control</h1><div class="sub">Aluminium extrusion plant · AgentX@CCI 2026 · Problem 3</div></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="scen-pick"><label class="eyebrow" for="scen">Scenario</label><select id="scen"></select></div>
+    <span class="badge" id="mode"><span class="dot"></span><span>Replay of recorded simulator runs</span></span>
+  </div>
+  <nav class="wrap tabs" aria-label="Views">
+    <a href="#control">Energy Control</a><a href="#twin">Digital Twin</a><a href="#whatif">What-If Simulator</a><a href="#compare">Before vs After</a><a href="#timeline">Decision Timeline</a>
+  </nav>
+  <div class="wrap play">
+    <button class="btn primary" id="playbtn" aria-label="Play the day"><svg width="12" height="12" viewBox="0 0 12 12"><path id="playicon" d="M2 1l9 5-9 5z" fill="currentColor"/></svg><span id="playlbl">Play day</span></button>
+    <div class="clock" id="clock">00:00</div>
+    <input type="range" class="scrub" id="scrub" min="0" max="95" value="0" aria-label="Time of day">
+    <span class="band-chip" id="bandchip">Off-peak · 0.23 AED/kWh</span>
+    <div class="speed" role="group" aria-label="Playback speed"><button data-sp="1">1×</button><button data-sp="4" aria-pressed="true">4×</button><button data-sp="12">12×</button></div>
+  </div>
+</div>
+
+<main class="wrap" id="main"></main>
+<div class="tip" id="tip" hidden></div>
+
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>/*__CORE__*/</script>
+<script>/*__RUNNER__*/</script>
+<script>
+(() => {
+'use strict';
+const D = JSON.parse(document.getElementById('data').textContent);
+const MC = Object.fromEntries(D.meter_cols.map((c, i) => [c, i]));
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const n0 = v => v == null || !isFinite(v) ? '–' : Math.round(v).toLocaleString('en-US');
+const n1 = v => v == null || !isFinite(v) ? '–' : (Math.round(v * 10) / 10).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const hm = i => `${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}`;
+const toI = t => { const [h, m] = String(t).split(':').map(Number); return clamp(h * 4 + Math.floor((m || 0) / 15), 0, 96); };
+const band = i => { const h = Math.floor(i / 4); return h >= 12 && h < 18 ? 'peak' : (h >= 23 || h < 7) ? 'off-peak' : 'shoulder'; };
+const RATE = { peak: 0.62, shoulder: 0.38, 'off-peak': 0.23 };
+const CAP = 4300, ICE_MAX = 9000;
+const DAYS = { practice_01: 'Day 1 · normal', practice_02: 'Day 2 · heatwave', practice_03: 'Day 3 · cloudy', practice_04: 'Day 4 · rush order', practice_05: 'Day 5 · chiller trip', practice_06: 'Day 6 · forecast miss' };
+
+const S = { sid: 'trip', i: 54, hover: null, playing: false, speed: 4, view: 'control', live: null, extra: [], sel: null, tlSel: null, tlFilter: 'inc', charts: [] };
+
+// ------------------------------------------------------------ scenario model
+const allScen = () => D.scenarios.concat(S.extra);
+const scen = () => allScen().find(s => s.id === S.sid) || D.scenarios[0];
+function model(sc) {
+  if (sc._m) return sc._m;
+  const col = (rows, k) => rows.map(r => r[MC[k]]);
+  const A = sc.meters, B = (D.baselines[sc.day] || {}).meters || [];
+  const m = { t: col(A, 't') };
+  for (const k of ['grid_kw', 'chiller_kw', 'solar_kw', 'ice_kwhth', 'floor_c', 'outdoor_c', 'presses', 'chillers', 'cost_aed', 'tariff', 'load_kwth']) { m[k] = col(A, k); m['b_' + k] = col(B, k); }
+  const cum = a => { let s = 0; return a.map(v => (s += v || 0)); };
+  m.cum = cum(m.cost_aed); m.b_cum = cum(m.b_cost_aed);
+  m.trace = sc.trace || [];
+  m.ord = Object.fromEntries((sc.orders || []).map(o => [o.order_id, o]));
+  m.diary = (sc.diary || []).map((d, k) => ({ ...d, i: toI(d.t), k }));
+  m.base = D.baselines[sc.day] || {};
+  m.inc = m.trace.filter(x => (x.events || []).some(e => e.type !== 'safety_override') || x.ai);
+  sc._m = m; return m;
+}
+function chillersAt(sc, i) { const m = model(sc); const t = m.trace[i + 1] || m.trace[i] || {}; return t.chillers || {}; }
+function storageAt(sc, i) { const m = model(sc); const t = m.trace[i + 1] || m.trace[i] || {}; return { mode: t.mode || 'idle', rate: t.rate || 0 }; }
+function pressesAt(sc, i, sched) {
+  const m = model(sc), out = {};
+  for (const [o, a] of Object.entries(sched || sc.schedule || {})) { const d = (m.ord[o] || {}).duration_h; if (d && i >= a.start * 4 && i < (a.start + d) * 4) out[a.press] = { order: o, start: a.start, end: a.start + d, due: (m.ord[o] || {}).due_by, pr: (m.ord[o] || {}).priority }; }
+  return out;
+}
+function chillerClass(v) { return v === 'on' ? 'run' : (v === 'off' ? 'idle' : 'bad'); }
+function chillerLabel(v, standby) { return v === 'on' ? 'Running' : v === 'off' ? (standby ? 'Standby' : 'Idle') : 'Broken'; }
+function diaryUpTo(sc, i) { return model(sc).diary.filter(d => d.i <= i); }
+
+// ------------------------------------------------------------ charts
+function nice(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+function chart(el, o) {
+  const W = Math.round(clamp(el.clientWidth || o.w || 760, 300, 1600)), H = o.h || 230, pl = 52, pr = 14, pt = 16, pb = 24, n = 96;
+  el.dataset.w = W;
+  const vals = o.series.flatMap(s => s.v).filter(v => v != null && isFinite(v));
+  let ymin = o.ymin ?? Math.min(0, ...vals), ymax = o.ymax ?? Math.max(...vals, ...(o.hl || []).map(h => h.y));
+  const step = o.step || nice((ymax - ymin) / 4); ymax = Math.ceil(ymax / step) * step; ymin = Math.floor(ymin / step) * step; if (ymax === ymin) ymax = ymin + step;
+  const X = i => pl + i / n * (W - pl - pr), Y = v => pt + (1 - (v - ymin) / (ymax - ymin)) * (H - pt - pb);
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${esc(o.label || '')}">`;
+  s += `<rect x="${X(48)}" y="${pt}" width="${X(72) - X(48)}" height="${H - pt - pb}" class="peakband"/><text x="${X(60)}" y="${pt + 11}" text-anchor="middle" class="bandlbl">PEAK 12–18</text>`;
+  for (let v = ymin; v <= ymax + 1e-9; v += step) s += `<line class="gl" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${(o.fmt || n0)(v)}</text>`;
+  for (const h of [0, 6, 12, 18, 24]) s += `<text x="${X(h * 4)}" y="${H - 6}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${String(h).padStart(2, '0')}:00</text>`;
+  for (const b of o.bands || []) s += `<rect x="${X(b.a)}" y="${Y(b.y1 ?? ymax)}" width="${X(b.b) - X(b.a)}" height="${Y(b.y0 ?? ymin) - Y(b.y1 ?? ymax)}" fill="${b.fill}" opacity="${b.op ?? .12}"/>` + (b.label ? `<text x="${X(b.a) + 4}" y="${Y(b.y1 ?? ymax) + 12}" style="fill:${b.fill};font-weight:600">${esc(b.label)}</text>` : '');
+  for (const sr of o.series) {
+    const pts = sr.v.map((v, i) => v == null ? null : [X(i + 0.5), Y(clamp(v, ymin, ymax))]).filter(Boolean);
+    if (!pts.length) continue;
+    const d = 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L');
+    if (sr.area) s += `<path d="${d}L${pts[pts.length - 1][0].toFixed(1)} ${Y(Math.max(ymin, 0))}L${pts[0][0].toFixed(1)} ${Y(Math.max(ymin, 0))}Z" fill="${sr.color}" opacity="${sr.op ?? .16}"/>`;
+    s += `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="${sr.w || 2}" stroke-linejoin="round" ${sr.dash ? `stroke-dasharray="${sr.dash}"` : ''}/>`;
+  }
+  for (const h of o.hl || []) s += `<line x1="${pl}" x2="${W - pr}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.color}" stroke-width="1.2" stroke-dasharray="${h.dash || '5 4'}"/><text x="${W - pr - 4}" y="${Y(h.y) - 5}" text-anchor="end" style="fill:${h.color}">${esc(h.label)}</text>`;
+  for (const mk of o.marks || []) s += `<circle cx="${X(mk.i + 0.5)}" cy="${Y(mk.v)}" r="4.5" fill="var(--panel)" stroke="${mk.color}" stroke-width="2.2"/><text x="${clamp(X(mk.i + 0.5), pl + 50, W - pr - 50)}" y="${Y(mk.v) + ((o.hl || []).some(h => Math.abs(Y(h.y) - Y(mk.v) + 9) < 12) ? 20 : -9)}" text-anchor="middle" class="halo" style="fill:${mk.color};font-weight:600">${esc(mk.label)}</text>`;
+  s += `<rect class="fut" x="0" y="${pt}" width="0" height="${H - pt - pb}"/><line class="phl" y1="${pt}" y2="${H - pb}" x1="${pl}" x2="${pl}"/><line class="hvl" y1="${pt}" y2="${H - pb}" x1="-9" x2="-9"/></svg>`;
+  el.innerHTML = s;
+  const svg = el.firstElementChild, fut = svg.querySelector('.fut'), ph = svg.querySelector('.phl'), hv = svg.querySelector('.hvl');
+  const c = {
+    svg, o, set(i, h) {
+      const x = X(i + 1); ph.setAttribute('x1', x); ph.setAttribute('x2', x);
+      if (o.future) { fut.setAttribute('x', x); fut.setAttribute('width', Math.max(0, W - pr - x)); }
+      const hx = h == null ? pl : X(h + 0.5); hv.setAttribute('x1', hx); hv.setAttribute('x2', hx); hv.style.opacity = h == null ? 0 : 1;
+    }
+  };
+  const idx = e => { const r = svg.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * W; return clamp(Math.floor((x - pl) / (W - pl - pr) * n), 0, 95); };
+  svg.addEventListener('pointermove', e => setHover(idx(e), e, c));
+  svg.addEventListener('pointerleave', () => setHover(null));
+  svg.addEventListener('click', e => seek(idx(e)));
+  S.charts.push(c); c.set(S.i, S.hover);
+  return c;
+}
+function setHover(i, e, c) {
+  S.hover = i;
+  for (const ch of S.charts) ch.set(S.i, i);
+  const tip = $('#tip');
+  if (i == null || !c || !c.o.tip) { tip.hidden = true; } else {
+    tip.innerHTML = c.o.tip(i); tip.hidden = false;
+    const r = tip.getBoundingClientRect(); tip.style.left = clamp(e.clientX + 14, 8, innerWidth - r.width - 8) + 'px'; tip.style.top = clamp(e.clientY - r.height - 12, 8, innerHeight - r.height - 8) + 'px';
+  }
+  if (S.view === 'compare') readout(i);
+}
+
+// ------------------------------------------------------------ playback
+function seek(i) { S.i = clamp(i, 0, 95); update(); }
+let timer = null;
+function play(on) {
+  S.playing = on; $('#playlbl').textContent = on ? 'Pause' : 'Play day'; $('#playicon').setAttribute('d', on ? 'M2 1h3v10H2zM7 1h3v10H7z' : 'M2 1l9 5-9 5z');
+  clearInterval(timer);
+  if (on) { if (S.i >= 95) S.i = 0; timer = setInterval(() => { if (S.i >= 95) return play(false); S.i++; update(); }, 1000 / S.speed); }
+}
+$('#playbtn').onclick = () => play(!S.playing);
+$('#scrub').oninput = e => seek(+e.target.value);
+document.querySelectorAll('.speed button').forEach(b => b.onclick = () => { S.speed = +b.dataset.sp; document.querySelectorAll('.speed button').forEach(x => x.setAttribute('aria-pressed', x === b)); if (S.playing) play(true); });
+addEventListener('keydown', e => { if (e.target.matches('input,select,textarea')) return; if (e.key === 'ArrowRight') seek(S.i + 1); else if (e.key === 'ArrowLeft') seek(S.i - 1); else if (e.key === ' ' && e.target === document.body) { e.preventDefault(); play(!S.playing); } });
+
+function fillScenarioSelect() {
+  $('#scen').innerHTML = allScen().map(s => `<option value="${esc(s.id)}">${esc(s.name)}${s.custom ? ' (live run)' : ''}</option>`).join('');
+  $('#scen').value = S.sid;
+}
+$('#scen').onchange = e => selectScenario(e.target.value);
+function selectScenario(id, keepI) { S.sid = id; S.sel = null; S.tlSel = null; if (!keepI) S.i = defaultI(scen()); $('#scen').value = id; render(); }
+function defaultI(sc) { const m = model(sc); const f = m.inc[0]; return f ? clamp(f.k + 1, 0, 95) : 54; }
+
+// ------------------------------------------------------------ views
+const VIEWS = { control: viewControl, twin: viewTwin, whatif: viewWhatIf, compare: viewCompare, timeline: viewTimeline };
+function route() { const v = (location.hash || '').slice(1); S.view = VIEWS[v] ? v : 'control'; document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + S.view ? 'page' : 'false')); render(); }
+addEventListener('hashchange', route);
+function render() { S.charts = []; $('#tip').hidden = true; VIEWS[S.view].render(); update(); }
+function update() {
+  const sc = scen(), m = model(sc), i = S.i;
+  $('#clock').textContent = hm(i); $('#scrub').value = i;
+  const b = band(i); const bc = $('#bandchip'); bc.textContent = `${b[0].toUpperCase() + b.slice(1)} · ${(m.tariff[i] ?? RATE[b]).toFixed(2)} AED/kWh`; bc.classList.toggle('peak', b === 'peak');
+  for (const c of S.charts) c.set(i, S.hover);
+  VIEWS[S.view].update && VIEWS[S.view].update(sc, m, i);
+}
+function head(title, text, extra = '') { return `<div class="view-head"><div style="min-width:0;flex:1"><div class="eyebrow">${esc(scen().name)} · ${esc(DAYS[scen().day] || scen().day)}</div><h2>${title}</h2><p>${text}</p></div>${extra}</div>`; }
+
+// ===== 1. Energy Control
+function viewControl() {}
+viewControl.render = () => {
+  const sc = scen(), m = model(sc);
+  $('#main').innerHTML = head('Energy Control', 'What the plant is doing right now and how much the agent has saved so far. Drag the time bar or press play to run through the day.') + `
+  <section class="kpis" id="kpis"></section>
+  <div class="grid2">
+    <div class="col"><div class="panel"><div class="ph"><h3>Grid power</h3><div class="legend"><span><i style="background:var(--gridc)"></i>With agent</span><span><i style="background:var(--base)"></i>Without agent</span><span><i style="background:var(--solar)"></i>Solar</span><span><i style="background:var(--peak)"></i>Peak limit ${n0(CAP)} kW</span></div></div><div id="c-grid"></div></div>
+    <div class="panel"><div class="ph"><h3>Production schedule</h3><div class="legend"><span><i class="box" style="background:var(--accent)"></i>Agent plan</span><span><i class="box" style="border:1.5px dashed var(--base);background:transparent"></i>Without agent</span><span><i class="box" style="background:var(--bad)"></i>Due time</span></div></div><div id="gantt" style="overflow-x:auto"></div></div>
+    <div class="grid-even" style="margin-top:0"><div class="panel"><div class="ph"><h3>Floor temperature</h3><div class="legend"><span><i style="background:var(--accent)"></i>Floor (must stay 20–27 °C)</span><span><i style="background:var(--peak)"></i>Outdoor</span></div></div><div id="c-temp"></div></div>
+    <div class="panel"><div class="ph"><h3>Ice storage</h3><div class="legend"><span><i style="background:var(--ice)"></i>Stored cooling (kWh)</span></div></div><div id="c-ice"></div></div></div></div>
+    <div class="col"><div class="panel"><div class="ph"><h3>Plant now</h3><span class="mono muted small" id="pn-t"></span></div><div id="plant"></div></div>
+    <div class="panel"><div class="ph"><h3>Agent log</h3><span class="muted small">Decisions, AI advice and alerts up to now</span></div><div class="feed" id="feed"></div></div></div>
+  </div>`;
+  chart($('#c-grid'), { label: 'Grid power', future: true, h: 300, series: [{ v: m.b_grid_kw, color: 'var(--base)', w: 1.5, dash: '4 3' }, { v: m.solar_kw, color: 'var(--solar)', area: true, w: 1.5 }, { v: m.grid_kw, color: 'var(--gridc)', w: 2.2 }],
+    hl: [{ y: CAP, label: 'peak limit', color: 'var(--peak)' }], tip: i => `<b>${hm(i)}</b><br>With agent ${n0(m.grid_kw[i])} kW<br>Without agent ${n0(m.b_grid_kw[i])} kW<br>Solar ${n0(m.solar_kw[i])} kW<br>Tariff ${m.tariff[i]} AED/kWh` });
+  chart($('#c-temp'), { label: 'Floor temperature', future: true, h: 210, ymin: 18, ymax: 52, step: 8, fmt: v => v + '°', bands: [{ a: 0, b: 96, y0: 20, y1: 27, fill: 'var(--ok)', op: .08, label: 'allowed 20–27 °C' }],
+    series: [{ v: m.outdoor_c, color: 'var(--peak)', w: 1.5 }, { v: m.floor_c, color: 'var(--accent)', w: 2.4 }], tip: i => `<b>${hm(i)}</b><br>Floor ${n1(m.floor_c[i])} °C<br>Outdoor ${n1(m.outdoor_c[i])} °C` });
+  chart($('#c-ice'), { label: 'Ice storage', future: true, h: 210, ymin: 0, ymax: ICE_MAX, step: 3000, series: [{ v: m.ice_kwhth, color: 'var(--ice)', area: true, w: 2.2, op: .2 }],
+    tip: i => `<b>${hm(i)}</b><br>Ice ${n0(m.ice_kwhth[i])} kWh (${Math.round(m.ice_kwhth[i] / ICE_MAX * 100)}%)<br>${(() => { const s = storageAt(scen(), i); return s.mode === 'idle' ? 'Tank idle' : (s.mode === 'charge' ? 'Making ice' : 'Melting ice') + ' at ' + n0(s.rate) + ' kW'; })()}` });
+  gantt();
+};
+viewControl.update = (sc, m, i) => {
+  const sl = a => a.slice(0, i + 1).reduce((x, y) => x + (y || 0), 0);
+  const cost = m.cum[i], bcost = m.b_cum[i], sav = bcost ? (1 - cost / bcost) * 100 : 0;
+  const pk = Math.max(...m.grid_kw.slice(0, i + 1)), bpk = Math.max(...m.b_grid_kw.slice(0, i + 1));
+  const co2 = (sl(m.b_grid_kw) - sl(m.grid_kw)) * 0.25 * 0.4;
+  const f = m.floor_c[i], ice = m.ice_kwhth[i];
+  const k = (l, v, u, d, cls = '') => `<div class="kpi ${cls}"><div class="eyebrow">${l}</div><div class="v">${v}<small>${u}</small></div><div class="d">${d}</div></div>`;
+  $('#kpis').innerHTML =
+    k('Cost so far', n0(cost), 'AED', `${n0(bcost)} AED without agent`) +
+    k('Saving so far', (sav >= 0 ? '' : '') + n1(sav), '%', `day result ${n1(sc.sum.saving_pct)}% (official)`, sav > 0 ? 'good' : '') +
+    k('Grid now', n0(m.grid_kw[i]), 'kW', `${n0(m.b_grid_kw[i])} kW without agent`, band(i) === 'peak' ? 'hot' : '') +
+    k('Peak so far', n0(pk), 'kW', `${n0(bpk)} kW without agent`) +
+    k('Floor', n1(f), '°C', f >= 20 && f <= 27 ? 'inside 20–27 °C' : 'OUTSIDE 20–27 °C', f >= 20 && f <= 27 ? '' : 'hot') +
+    k('Ice stored', n0(ice), 'kWh', `${Math.round(ice / ICE_MAX * 100)}% of 9,000 kWh`) +
+    k('Solar now', n0(m.solar_kw[i]), 'kW', `outdoor ${n1(m.outdoor_c[i])} °C`) +
+    k('AI decisions', (sc.ai_decisions || []).filter(a => a.t.slice(11, 16) <= hm(i)).length, '', `${diaryUpTo(sc, i).length} logged decisions so far`);
+  $('#pn-t').textContent = hm(i);
+  const ch = chillersAt(sc, i), st = storageAt(sc, i), pr = pressesAt(sc, i), cfg = Object.fromEntries(D.chillers.map(c => [c.chiller_id, c]));
+  const offs = Object.entries(ch).filter(([, v]) => v === 'off').map(([k]) => k);
+  $('#plant').innerHTML = `<div class="sec-title">Chillers · 4 × 1,200 kW cooling</div><div class="eq">${Object.entries(ch).map(([id, v]) => `<div class="eq-row"><span class="nm">${id}</span><span class="chip st-${v === 'on' ? 'run' : v === 'off' ? 'idle' : 'bad'}">${chillerLabel(v, offs[0] === id)}</span><span class="ex">COP ${cfg[id] ? cfg[id].rated_cop : ''}${cfg[id] && cfg[id].ice_mode_capable ? ' · ice-capable' : ''}</span></div>`).join('')}</div>
+    <div class="sec-title">Ice tank</div><div class="eq-row" style="flex-wrap:wrap"><span class="chip ${st.mode === 'idle' ? 'st-idle' : 'st-ice'}">${st.mode === 'charge' ? 'Making ice' : st.mode === 'discharge' ? 'Melting ice' : 'Idle'}</span><span class="mono small">${st.mode === 'idle' ? '' : n0(st.rate) + ' kW'}</span><span class="ex">${n0(ice)} / 9,000 kWh</span><div class="gauge" style="flex-basis:100%"><div style="width:${ice / ICE_MAX * 100}%"></div></div></div>
+    <div class="sec-title">Extrusion presses · 1,100 kW each</div><div class="eq">${['EP-1', 'EP-2', 'EP-3'].map(p => `<div class="eq-row"><span class="nm">${p}</span><span class="chip ${pr[p] ? 'st-run' : 'st-idle'}">${pr[p] ? 'Running' : 'Idle'}</span><span class="ex">${pr[p] ? `${esc(pr[p].order)}${pr[p].pr === 'rush' ? ' · rush' : ''} · ${String(pr[p].start).padStart(2, '0')}:00–${String(pr[p].end).padStart(2, '0')}:00` : ''}</span></div>`).join('')}</div>`;
+  const items = [];
+  for (const d of diaryUpTo(sc, i)) items.push({ i: d.i, k: d.k, cls: /^AI/.test(d.saw) ? 'ai' : /chiller_trip|sensor_fault|invalid|demand_response|forecast_deviation|new_order|cancel|safety override|cooling for next/.test(d.saw + d.decided) ? 'alert' : '', html: `<div class="t">${d.t}</div><div><b>Saw</b> ${esc(d.saw)}</div><div><b>Did</b> ${esc(d.decided)}</div><div class="why"><b>Why</b> ${esc(d.why)}</div>` });
+  const feed = $('#feed'); feed.innerHTML = items.slice(-40).reverse().map(x => `<div class="fi ${x.cls}">${x.html}</div>`).join('') || '<div class="muted small">Nothing yet.</div>';
+  ganttPh();
+};
+function gantt() {
+  const sc = scen(), m = model(sc), W = 760, H = 150, pl = 48, pr = 12, top = 18, rh = 36;
+  const X = h => pl + h / 24 * (W - pl - pr);
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="chart" style="min-width:560px" role="img" aria-label="Press schedule">`;
+  s += `<rect x="${X(12)}" y="${top - 6}" width="${X(18) - X(12)}" height="${3 * rh + 4}" class="peakband"/>`;
+  for (const h of [0, 3, 6, 9, 12, 15, 18, 21, 24]) s += `<line class="gl" x1="${X(h)}" x2="${X(h)}" y1="${top - 6}" y2="${top + 3 * rh - 2}"/><text x="${X(h)}" y="${H - 8}" text-anchor="middle">${String(h).padStart(2, '0')}</text>`;
+  ['EP-1', 'EP-2', 'EP-3'].forEach((p, r) => {
+    const y = top + r * rh; s += `<text x="${pl - 8}" y="${y + 18}" text-anchor="end" style="font-weight:600;fill:var(--ink2)">${p}</text>`;
+    for (const [o, a] of Object.entries(m.base.schedule || {})) if (a.press === p) { const d = (m.ord[o] || {}).duration_h || 0; s += `<rect x="${X(a.start) + 1}" y="${y + 2}" width="${X(a.start + d) - X(a.start) - 2}" height="${rh - 10}" rx="5" fill="none" stroke="var(--base)" stroke-dasharray="4 3"/>`; }
+    for (const [o, a] of Object.entries(sc.schedule || {})) if (a.press === p) {
+      const od = m.ord[o] || {}, d = od.duration_h || 0, due = od.due_by ? (new Date(od.due_by) - new Date(String(od.due_by).slice(0, 10) + 'T00:00:00')) / 3600000 : null;
+      s += `<g><title>${esc(o)}: ${a.start}:00–${a.start + d}:00 on ${p}${due != null ? ', due ' + due + ':00' : ''}${od.priority === 'rush' ? ' (rush)' : ''}</title><rect x="${X(a.start) + 1}" y="${y + 6}" width="${X(a.start + d) - X(a.start) - 2}" height="${rh - 18}" rx="4" fill="var(--accent)" opacity=".85"/><text x="${X(a.start) + 6}" y="${y + 21}" style="fill:var(--accent-ink);font-weight:600">${esc(o)}${od.priority === 'rush' ? ' ⚑' : ''}</text></g>`;
+      if (due != null) s += `<line x1="${X(due)}" x2="${X(due)}" y1="${y + 2}" y2="${y + rh - 8}" stroke="var(--bad)" stroke-width="2"/>`;
+    }
+  });
+  s += `<line class="phl" id="g-ph" y1="${top - 6}" y2="${top + 3 * rh - 2}" x1="0" x2="0"/></svg>`;
+  $('#gantt').innerHTML = s; gantt.X = X;
+}
+function ganttPh() { const l = $('#g-ph'); if (l) { const x = gantt.X((S.i + 1) / 4); l.setAttribute('x1', x); l.setAttribute('x2', x); } }
+
+// ===== 2. Digital twin
+function viewTwin() {}
+viewTwin.render = () => {
+  const sc = scen();
+  const chill = [['CH-1', 650, 150], ['CH-2', 810, 150], ['CH-3', 650, 290], ['CH-4', 810, 290]];
+  const press = [['EP-1', 70], ['EP-2', 245], ['EP-3', 420]];
+  let s = `<svg viewBox="0 0 1000 620" class="twin" role="img" aria-label="Digital twin of the plant">`;
+  // flows (under equipment)
+  s += `<path class="pipe" d="M640 230 H600"/><path class="pipe" d="M730 430 V400 H630 V330 H600"/><path class="pipe" d="M700 500 H630 V360"/>`;
+  s += `<path class="flow cold" id="f-cool" d="M650 230 H595"/><path class="flow cold" id="f-charge" d="M730 400 V430"/><path class="flow cold" id="f-dis" d="M700 500 H630 V360 H595"/>`;
+  s += `<path class="pipe" d="M935 70 V110 H560 V125" style="stroke-width:4"/><path class="flow pow" id="f-grid" d="M935 70 V110 H560 V125"/>`;
+  s += `<path class="pipe" d="M330 112 V125" style="stroke-width:4"/><path class="flow sun" id="f-sun" d="M330 100 V125"/>`;
+  // solar roof
+  s += `<g id="solar" class="hit" data-eq="solar"><rect class="body" x="40" y="14" width="560" height="96" rx="8" style="fill:transparent;stroke:transparent"/>`;
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 10; c++) s += `<rect class="panelcell" x="${60 + c * 52}" y="${30 + r * 34}" width="46" height="28" rx="2"/>`;
+  s += `<text class="lbl" x="44" y="12">SOLAR PV</text><text class="val" id="t-sun" x="596" y="12" text-anchor="end"></text></g>`;
+  // grid
+  s += `<g class="hit" data-eq="grid"><rect class="body" x="880" y="14" width="110" height="56" rx="8"/><text class="lbl" x="892" y="34">GRID</text><text class="big" id="t-grid" x="892" y="60" style="font-size:17px"></text></g>`;
+  // hall
+  s += `<rect class="hall" x="30" y="125" width="580" height="330" rx="10"/><text class="lbl" x="46" y="148">PRODUCTION FLOOR · 3 EXTRUSION PRESSES</text>`;
+  for (const [id, x] of press) s += `<g id="p-${id}" class="hit idle" data-eq="${id}"><rect class="body" x="${x}" y="185" width="160" height="170" rx="10"/><rect class="ram" x="${x + 20}" y="205" width="24" height="60" rx="3"/><rect x="${x + 44}" y="228" width="80" height="18" rx="3" fill="var(--line)"/><rect class="billet" x="${x + 50}" y="231" width="70" height="12" rx="6"/><rect x="${x + 124}" y="220" width="16" height="34" rx="3" fill="var(--ink3)"/><text class="lbl" x="${x + 12}" y="290">${id}</text><text class="val" id="pt-${id}" x="${x + 12}" y="310"></text><text class="val" id="pt2-${id}" x="${x + 12}" y="328"></text><rect x="${x + 12}" y="338" width="136" height="6" rx="3" fill="var(--panel2)"/><rect id="pp-${id}" x="${x + 12}" y="338" width="0" height="6" rx="3" fill="var(--accent)"/></g>`;
+  s += `<g class="hit" data-eq="floor"><rect class="body" x="46" y="372" width="548" height="70" rx="8"/><text class="lbl" x="60" y="396">FLOOR TEMPERATURE</text><text class="big" id="t-floor" x="60" y="428"></text><rect x="300" y="396" width="270" height="14" rx="7" fill="var(--panel)"/><rect x="${300 + 5 / 20 * 270}" y="396" width="${7 / 20 * 270}" height="14" rx="7" fill="var(--ok)" opacity=".18"/><circle id="t-fmark" cx="0" cy="403" r="7" fill="var(--ok)"/><text class="val" x="${300 + 5 / 20 * 270}" y="428" text-anchor="middle">20 °C</text><text class="val" x="${300 + 12 / 20 * 270}" y="428" text-anchor="middle">27 °C</text><text class="val" id="t-fnote" x="160" y="428"></text></g>`;
+  // chillers
+  s += `<text class="lbl" x="640" y="140">CHILLER YARD</text>`;
+  for (const [id, x, y] of chill) s += `<g id="c-${id}" class="hit idle" data-eq="${id}"><rect class="body" x="${x}" y="${y}" width="140" height="120" rx="10"/><circle class="fan" cx="${x + 40}" cy="${y + 52}" r="24"/><path class="fan" d="M${x + 40} ${y + 30} V${y + 74} M${x + 18} ${y + 52} H${x + 62}"/><path class="x" d="M${x + 22} ${y + 34} l36 36 M${x + 58} ${y + 34} l-36 36"/><text class="lbl" x="${x + 76}" y="${y + 40}">${id}</text><text class="val" id="ct-${id}" x="${x + 76}" y="${y + 60}"></text><text class="val" id="ct2-${id}" x="${x + 12}" y="${y + 106}"></text></g>`;
+  // ice tank
+  s += `<g class="hit" data-eq="ice"><rect class="body" x="640" y="430" width="320" height="170" rx="10" style="fill:transparent;stroke:transparent"/><text class="lbl" x="660" y="452">ICE STORAGE · 9,000 kWh</text><rect class="tankbody" x="680" y="462" width="110" height="126" rx="14"/><clipPath id="tc"><rect x="681" y="463" width="108" height="124" rx="13"/></clipPath><rect class="tankfill" id="t-icefill" x="680" y="588" width="110" height="0" clip-path="url(#tc)"/><text class="big" id="t-ice" x="810" y="510"></text><text class="val" id="t-icemode" x="810" y="536"></text><text class="val" id="t-icepct" x="810" y="558"></text></g>`;
+  s += `<text class="val" x="30" y="478">Base load 650 kW (lights, compressors, offices)</text>`;
+  s += `<g id="twin-alert" style="display:none"><rect x="30" y="490" width="580" height="44" rx="8" fill="color-mix(in srgb,var(--bad) 12%,var(--panel))" stroke="var(--bad)"/><text id="twin-alert-t" x="44" y="517" style="fill:var(--bad);font-weight:600;font-size:14px"></text></g>`;
+  s += `</svg>`;
+  $('#main').innerHTML = head('Digital Twin', 'A simplified live model of the plant. Running equipment is green, idle or standby is grey and broken equipment is red. Click any piece of equipment for details.') + `
+  <div class="twin-wrap"><div class="panel twin-scroll">${s}<div class="leg2" style="margin-top:8px"><span class="chip st-run">Running</span><span class="chip st-idle">Idle / standby</span><span class="chip st-bad">Broken</span><span class="chip st-ice">Ice charging / melting</span><span class="muted small" style="align-self:center">Moving lines show power and chilled water flowing.</span></div></div>
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0"><div class="panel"><div class="ph"><h3>What the agent is doing</h3><span class="mono muted small" id="tw-t"></span></div><div class="now-box" id="tw-now"></div></div><div class="panel det"><div class="ph"><h3 id="det-h">Equipment</h3></div><div id="det"></div></div></div></div>`;
+  document.querySelectorAll('.twin .hit').forEach(g => g.addEventListener('click', () => { S.sel = g.dataset.eq; update(); }));
+  if (!S.sel) S.sel = 'CH-2';
+};
+viewTwin.update = (sc, m, i) => {
+  const ch = chillersAt(sc, i), st = storageAt(sc, i), pr = pressesAt(sc, i), cfg = Object.fromEntries(D.chillers.map(c => [c.chiller_id, c]));
+  const offs = Object.entries(ch).filter(([, v]) => v === 'off').map(([k]) => k);
+  const setC = (el, c) => { el.classList.remove('run', 'idle', 'bad'); el.classList.add(c); };
+  for (const id of ['CH-1', 'CH-2', 'CH-3', 'CH-4']) { const v = ch[id]; setC($('#c-' + id), chillerClass(v)); $('#ct-' + id).textContent = chillerLabel(v, offs[0] === id); $('#ct2-' + id).textContent = `COP ${cfg[id].rated_cop}${cfg[id].ice_mode_capable ? ' · ice' : ''}`; }
+  for (const id of ['EP-1', 'EP-2', 'EP-3']) { const p = pr[id]; setC($('#p-' + id), p ? 'run' : 'idle'); $('#pt-' + id).textContent = p ? `${p.order}${p.pr === 'rush' ? ' · rush' : ''}` : 'Idle'; $('#pt2-' + id).textContent = p ? `${String(p.start).padStart(2, '0')}:00–${String(p.end).padStart(2, '0')}:00` : ''; $('#pp-' + id).setAttribute('width', p ? 136 * clamp((i / 4 - p.start) / (p.end - p.start), 0, 1) : 0); }
+  const anyRun = Object.values(ch).some(v => v === 'on');
+  $('#f-cool').classList.toggle('on', anyRun); $('#f-charge').classList.toggle('on', st.mode === 'charge'); $('#f-dis').classList.toggle('on', st.mode === 'discharge');
+  $('#f-grid').classList.toggle('on', m.grid_kw[i] > 0); $('#f-sun').classList.toggle('on', m.solar_kw[i] > 0);
+  $('#f-grid').style.strokeWidth = 2 + m.grid_kw[i] / 900; $('#f-sun').style.strokeWidth = 2 + m.solar_kw[i] / 500;
+  $('#solar').classList.toggle('sunon', m.solar_kw[i] > 50);
+  $('#t-sun').textContent = `${n0(m.solar_kw[i])} kW now`; $('#t-grid').textContent = `${n0(m.grid_kw[i])} kW`;
+  const f = m.floor_c[i]; $('#t-floor').textContent = `${n1(f)} °C`; $('#t-fmark').setAttribute('cx', 300 + clamp((f - 15) / 20, 0, 1) * 270); $('#t-fmark').setAttribute('fill', f >= 20 && f <= 27 ? 'var(--ok)' : 'var(--bad)');
+  $('#t-fnote').textContent = `outdoor ${n1(m.outdoor_c[i])} °C`;
+  const ice = m.ice_kwhth[i], hgt = 124 * ice / ICE_MAX; $('#t-icefill').setAttribute('y', 588 - hgt); $('#t-icefill').setAttribute('height', hgt);
+  $('#t-ice').textContent = `${n0(ice)} kWh`; $('#t-icemode').textContent = st.mode === 'charge' ? `Making ice · ${n0(st.rate)} kW` : st.mode === 'discharge' ? `Melting ice · ${n0(st.rate)} kW` : 'Idle'; $('#t-icepct').textContent = `${Math.round(ice / ICE_MAX * 100)}% full`;
+  // live alert banner: events in the last hour
+  const recent = m.trace.filter(t => t.k <= i + 1 && t.k > i - 3).flatMap(t => (t.events || []).filter(e => e.type !== 'safety_override'));
+  const broken = Object.entries(ch).filter(([, v]) => v !== 'on' && v !== 'off').map(([k]) => k);
+  const msg = broken.length ? `${broken.join(', ')} broken – agent re-planned around it` : recent.length ? evText(recent[recent.length - 1]) : '';
+  $('#twin-alert').style.display = msg ? '' : 'none'; $('#twin-alert-t').textContent = msg;
+  document.querySelectorAll('.twin .hit').forEach(g => g.classList.toggle('sel', g.dataset.eq === S.sel));
+  $('#tw-t').textContent = hm(i);
+  const d = diaryUpTo(sc, i).slice(-1)[0];
+  $('#tw-now').innerHTML = d ? `<div class="mono muted small">${d.t}</div><div><b>Saw:</b> ${esc(d.saw)}</div><div><b>Did:</b> ${esc(d.decided)}</div><div class="muted"><b>Why:</b> ${esc(d.why)}</div>` : 'Waiting for the first decision.';
+  details(sc, m, i, ch, st, pr, cfg, offs);
+};
+function details(sc, m, i, ch, st, pr, cfg, offs) {
+  const id = S.sel, dl = rows => '<dl>' + rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('') + '</dl>';
+  let h = id, b = '';
+  if (/^CH/.test(id)) { const c = cfg[id], v = ch[id]; h = `Chiller ${id}`; b = `<span class="chip st-${chillerClass(v) === 'run' ? 'run' : chillerClass(v) === 'bad' ? 'bad' : 'idle'}">${chillerLabel(v, offs[0] === id)}</span>` + dl([['Capacity', `${n0(c.capacity_kwth)} kW cooling`], ['Rated COP', c.rated_cop], ['Can make ice', c.ice_mode_capable ? 'yes (CH-1, CH-2 only)' : 'no'], ['Chillers running', `${m.chillers[i]} of 4`], ['Chiller power', `${n0(m.chiller_kw[i])} kW`], ['Backup rule', offs.length ? `${offs[0]} kept off as standby` : 'NO STANDBY']]); }
+  else if (/^EP/.test(id)) { const p = pr[id]; h = `Press ${id}`; b = `<span class="chip ${p ? 'st-run' : 'st-idle'}">${p ? 'Running' : 'Idle'}</span>` + dl(p ? [['Order', p.order + (p.pr === 'rush' ? ' (rush)' : '')], ['Runs', `${String(p.start).padStart(2, '0')}:00–${String(p.end).padStart(2, '0')}:00`], ['Due by', String(p.due || '').slice(11, 16)], ['Power', '1,100 kW + 380 kW extra cooling']] : [['Next', (() => { const nx = Object.entries(sc.schedule || {}).filter(([, a]) => a.press === id && a.start * 4 > i).sort((a, b) => a[1].start - b[1].start)[0]; return nx ? `${nx[0]} at ${String(nx[1].start).padStart(2, '0')}:00` : 'nothing more today'; })()]]); }
+  else if (id === 'ice') { h = 'Ice storage tank'; b = `<span class="chip ${st.mode === 'idle' ? 'st-idle' : 'st-ice'}">${st.mode === 'charge' ? 'Making ice' : st.mode === 'discharge' ? 'Melting ice' : 'Idle'}</span>` + dl([['Stored', `${n0(m.ice_kwhth[i])} kWh`], ['Capacity', '9,000 kWh'], ['Rate', `${n0(st.rate)} kW`], ['Limits', 'make 1,500 kW · melt 1,800 kW'], ['Idea', 'make ice when power is cheap, melt it at the peak']]); }
+  else if (id === 'solar') { h = 'Solar PV'; b = dl([['Output now', `${n0(m.solar_kw[i])} kW`], ['Peak today', `${n0(Math.max(...m.solar_kw))} kW`], ['Used for', 'covers part of the plant load; spare solar makes ice']]); }
+  else if (id === 'grid') { h = 'Grid connection'; b = dl([['Import now', `${n0(m.grid_kw[i])} kW`], ['Without agent', `${n0(m.b_grid_kw[i])} kW`], ['Tariff', `${m.tariff[i]} AED/kWh (${band(i)})`], ['Peak so far', `${n0(Math.max(...m.grid_kw.slice(0, i + 1)))} kW`], ['Demand charge', '45 AED per kW of monthly peak']]); }
+  else if (id === 'floor') { h = 'Production floor'; b = dl([['Temperature', `${n1(m.floor_c[i])} °C`], ['Allowed', '20–27 °C (hard rule)'], ['Cooling need', `${n0(m.load_kwth[i])} kW`], ['Outdoor', `${n1(m.outdoor_c[i])} °C`]]); }
+  $('#det-h').textContent = h; $('#det').innerHTML = b;
+}
+
+// ===== 3. What-if simulator
+const ICONS = {
+  normal: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  heatwave: '<path d="M10 14V4a2 2 0 0 1 4 0v10a4 4 0 1 1-4 0z"/><path d="M12 9v7"/>',
+  cloudy: '<path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 18z"/>',
+  rush: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h4"/><path d="M17 15v4M17 21v.5"/>',
+  trip: '<circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/><path d="M6 6l12 12" stroke-width="2.6"/>',
+  forecast: '<path d="M3 17l5-5 4 3 8-8"/><path d="M14 7h6v6"/>',
+  dr: '<path d="M12 2l-6 20M12 2l6 20M8 9h8M7 14h10"/>',
+  sensor: '<path d="M10 14V4a2 2 0 0 1 4 0v10a4 4 0 1 1-4 0z"/><path d="M18 3l3 3M21 3l-3 3"/>',
+  injection: '<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  custom: '<path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/>'
+};
+const icon = id => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[id] || ICONS.custom}</svg>`;
+let runState = null;
+function viewWhatIf() {}
+viewWhatIf.render = () => {
+  const live = S.live;
+  $('#main').innerHTML = head('What-If Simulator', 'Pick a situation and run it. The agent plans the day, the simulator plays it in 15-minute steps, and you see how the agent responds.') + `
+  <div class="cards" id="cards">${allScen().map(s => `<button class="sc" data-id="${esc(s.id)}" aria-pressed="${s.id === S.sid}"><div class="top"><span class="ic">${icon(s.custom ? 'custom' : s.id)}</span><h4>${esc(s.name)}</h4></div><p>${esc(s.blurb)}</p><div class="res">${esc(DAYS[s.day] || s.day)} · saved ${n1(s.sum.saving_pct)}% · ${(s.sum.violations || []).length} violations</div></button>`).join('')}</div>
+  <div class="panel runbox"><div class="ph"><h3 id="run-h">${esc(scen().name)}</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${live ? `<label class="small"><input type="checkbox" id="uselive" ${live ? 'checked' : ''}> Run on the live simulator</label>` : ''}<button class="btn primary" id="runbtn">${icon('normal').replace('width="20" height="20"', 'width="14" height="14"')}Run scenario</button></div></div>
+  <div class="progress"><div id="prog"></div></div><div class="note" id="run-note">${live ? 'Live mode: the agent core runs in this browser and drives the organisers\' simulator through the bridge.' : 'This page replays recorded runs of the real simulator. Open it through the bridge (python run_competition.py --platform) to run scenarios live.'}</div>
+  <div id="run-out"></div></div>
+  ${live ? customForm() : ''}`;
+  document.querySelectorAll('.sc').forEach(b => b.onclick = () => { selectScenario(b.dataset.id); });
+  $('#runbtn').onclick = () => runScenarioUI();
+  if (live) $('#cbtn').onclick = runCustom;
+  showResult(scen(), false);
+};
+function customForm() {
+  return `<div class="panel" style="margin-top:14px"><div class="ph"><h3>Build your own scenario</h3><span class="muted small">Runs live on the simulator</span></div>
+  <div class="form"><label>Day<select id="c-day">${Object.entries(DAYS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+  <label>Disruption<select id="c-fault"><option value="">None</option><option value="sensor">Floor sensor reads 85 °C (14:00–15:00)</option><option value="fc">Forecast service down (11:00–14:00)</option><option value="status">Plant status down (12:00–12:30)</option><option value="cmd">Chiller commands fail (13:00–14:00)</option><option value="orders">Order service down (08:00–10:00)</option><option value="inject">Malicious text in order data (from 08:00)</option></select></label>
+  <label>Demand-response cap (kW, 18:00–21:00)<input id="c-dr" type="number" min="0" step="100" placeholder="none, e.g. 1200"></label>
+  <label>Operator choice at 00:00<select id="c-choice"><option value="A">A · Recommended</option><option value="B">B · Max savings</option><option value="C">C · Extra safe</option></select></label>
+  <button class="btn primary" id="cbtn">Run custom scenario</button></div><div class="note" id="c-note">${S.live && !S.live.faults ? 'The bridge was started without the fault injector, so disruptions are unavailable. Use python run_competition.py --platform.' : ''}</div></div>`;
+}
+const FAULTS = { sensor: [{ kind: 'sensor', field: 'floor_temp_c', value: 85, from: '14:00', to: '15:00' }], fc: [{ kind: 'tool_error', tool: 'get_weather_forecast', from: '11:00', to: '14:00' }], status: [{ kind: 'tool_error', tool: 'get_plant_status', from: '12:00', to: '12:30' }], cmd: [{ kind: 'tool_error', tool: 'set_chiller_state', from: '13:00', to: '14:00' }], orders: [{ kind: 'tool_error', tool: 'get_production_orders', from: '08:00', to: '10:00' }], inject: [{ kind: 'prompt_injection', from: '08:00' }] };
+async function runCustom() {
+  const day = $('#c-day').value, f = $('#c-fault').value, cap = +$('#c-dr').value, ch = $('#c-choice').value;
+  const fl = $('#c-fault').selectedOptions[0].textContent;
+  const s = { id: 'custom-' + (S.extra.length + 1), custom: true, name: `Custom: ${DAYS[day].split(' · ')[1]}${f ? ' + ' + fl.split(' (')[0].toLowerCase() : ''}${cap ? ' + DR ≤' + cap + ' kW' : ''}`, day, choice: ch,
+    blurb: `${DAYS[day]}${f ? '; ' + fl : ''}${cap ? `; utility cap ${cap} kW from 18:00 to 21:00` : ''}; operator option ${ch}.`, faults: f ? FAULTS[f] : [], dr: cap ? [{ announce: '12:00', start: '18:00', end: '21:00', cap_kw: cap, id: 'DR-C' }] : [] };
+  if (f && !S.live.faults) { $('#c-note').textContent = 'Disruptions need the fault injector: start with python run_competition.py --platform.'; return; }
+  await liveRun(s);
+}
+async function liveRun(s) {
+  const btns = document.querySelectorAll('#runbtn,#cbtn'); btns.forEach(b => b.disabled = true);
+  $('#run-h').textContent = s.name; $('#run-out').innerHTML = ''; $('#run-note').textContent = 'Running live on the simulator…';
+  try {
+    const t0 = performance.now();
+    const p = await RUNNER.runScenario(CORE, S.live.base, { ...s, onTick: k => { $('#prog').style.width = ((k + 1) / 96 * 100) + '%'; } });
+    p.live = true; p.ms = Math.round(performance.now() - t0);
+    if (s.custom) { S.extra.push(p); fillScenarioSelect(); } else { const ix = D.scenarios.findIndex(x => x.id === s.id); D.scenarios[ix] = p; }
+    S.sid = p.id; S.i = defaultI(p); $('#scen').value = p.id;
+    render(); showResult(p, true);
+    $('#run-note').textContent = `Live run finished in ${(p.ms / 1000).toFixed(1)} s on the simulator. Every other view now shows this run.`;
+  } catch (e) { $('#run-note').textContent = 'The live run failed: ' + e.message + '. Check that the bridge is running.'; }
+  btns.forEach(b => b.disabled = false);
+}
+function runScenarioUI() {
+  const sc = scen();
+  if (S.live && $('#uselive') && $('#uselive').checked) { if ((sc.faults || []).length && !S.live.faults) { $('#run-note').textContent = 'This scenario needs the fault injector: start with python run_competition.py --platform.'; return; } return liveRun(sc); }
+  clearInterval(runState); $('#run-out').innerHTML = `<div class="resp" id="resp" style="margin-top:12px"></div>`; let k = 0; const m = model(sc); S.i = 0;
+  $('#run-note').textContent = 'Replaying the recorded simulator run…';
+  runState = setInterval(() => {
+    k += 2; S.i = clamp(k - 1, 0, 95); $('#prog').style.width = (k / 96 * 100) + '%'; update();
+    for (const t of m.inc.filter(t => t.k > k - 2 && t.k <= k)) $('#resp').insertAdjacentHTML('beforeend', respRow(t));
+    if (k >= 96) { clearInterval(runState); S.i = defaultI(sc); update(); showResult(sc, true); $('#run-note').textContent = 'Replay finished. The other views now show this scenario.'; }
+  }, 70);
+}
+function respRow(t) {
+  const ev = (t.events || []).filter(e => e.type !== 'safety_override').map(evText).join('; ');
+  const ai = t.ai ? ` → AI: ${aiText(t.ai)}` : '';
+  const v = t.validation ? (t.validation.ok ? ' → plan re-checked: all rules hold' : ' → plan rejected by the checker') : '';
+  return `<div class="r"><span class="t">${esc(t.t)}</span><span><b>${esc(ev || 'Event')}</b>${esc(ai)}${esc(v)}${t.cmds && t.cmds.length ? esc(` → ${t.cmds.length} command(s) sent`) : ''}</span></div>`;
+}
+function showResult(sc, ran) {
+  const m = model(sc), k = sc.kpi || {}, sum = sc.sum || {};
+  const tile = (l, v, u, d, cls = '') => `<div class="kpi ${cls}"><div class="eyebrow">${l}</div><div class="v">${v}<small>${u}</small></div><div class="d">${d}</div></div>`;
+  const opts = (sc.options || []).filter(o => o && o.key);
+  const chosen = String(k.what_if_choice || 'A').slice(0, 1);
+  $('#run-out').innerHTML = `${ran ? '' : ''}<div class="outcome">
+    ${tile('Energy cost saved', n1(sum.saving_pct), '%', `${n0(sum.cost_aed)} AED vs ${n0(sum.baseline_cost_aed)} AED baseline`, sum.saving_pct > 0 ? 'good' : '')}
+    ${tile('Peak demand', n0(sum.peak_kw), 'kW', `baseline ${n0(sum.baseline_peak_kw)} kW`)}
+    ${tile('Rule violations', (sum.violations || []).length, '', `${(sum.late_orders || []).length} late orders · ${sum.comfort_violation_minutes ?? 0} min outside 20–27 °C`, (sum.violations || []).length ? 'hot' : 'good')}
+    ${tile('AI calls', k.ai_calls ?? 0, '', `${k.escalations ?? 0} escalations · ${(sc.tool_errors || []).length} tool errors handled`)}
+  </div>
+  ${k.demand_response ? `<p class="small"><b>Demand response:</b> ${esc(k.demand_response)}</p>` : ''}
+  <div class="grid2" style="margin-top:6px"><div style="min-width:0"><div class="sec-title">How the agent responded</div><div class="resp">${m.inc.map(respRow).join('') || '<div class="muted small">A quiet day: only the hourly re-plans. Open the Decision Timeline to see them.</div>'}</div></div>
+  <div style="min-width:0"><div class="sec-title">Options the operator saw at 00:00</div><div class="tbl-wrap"><table><thead><tr><th>Option</th><th>Energy AED</th><th>Demand AED</th><th>Peak kW</th><th>Floor max*</th><th>Late</th></tr></thead><tbody>${opts.map(o => `<tr class="${o.key === chosen ? 'chosen' : ''}"><td>${esc(o.key)} · ${esc(o.label)}${o.key === chosen ? ' ✓' : ''}</td><td>${n0(o.energy_cost_aed)}</td><td>${n0(o.demand_charge_aed)}</td><td>${n0(o.peak_kw)}</td><td>${o.floor_max_stress_c ?? '–'} °C</td><td>${o.late_orders ?? '–'}</td></tr>`).join('')}</tbody></table></div><div class="note">* predicted with the weather 1 °C hotter than forecast. D is the do-nothing reference and cannot be chosen. The plant later re-plans every hour, so the final cost differs from these day-start estimates.</div></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><a class="btn" href="#twin">Watch it in the Digital Twin</a><a class="btn" href="#compare">Compare with no agent</a><a class="btn" href="#timeline">Open the decision timeline</a></div>`;
+}
+
+// ===== 4. Before vs After
+function viewCompare() {}
+viewCompare.render = () => {
+  const sc = scen(), m = model(sc), b = m.base, off = b.official || {}, sum = sc.sum || {}, bs = b.sum || {};
+  const pk = Math.max(...m.grid_kw), bpk = Math.max(...m.b_grid_kw), pki = m.grid_kw.indexOf(pk), bpki = m.b_grid_kw.indexOf(bpk);
+  const fmax = Math.max(...m.floor_c), bfmax = Math.max(...m.b_floor_c);
+  const dl = (a, b2, u, lowGood = true) => { const d = a - b2; const good = lowGood ? d < 0 : d > 0; return `<span class="delta ${Math.abs(d) < 1e-9 ? '' : good ? 'good' : 'bad'}">${d > 0 ? '+' : ''}${n0(d)} ${u}</span>`; };
+  const tile = (l, a, bb, u, extra) => `<div class="kpi"><div class="eyebrow">${l}</div><div class="v">${a}<small>${u}</small></div><div class="d">without agent ${bb} ${u} · ${extra}</div></div>`;
+  const dpk = 45 / 31;
+  $('#main').innerHTML = head('Before vs After', 'The same day in the same simulator, run twice: once with no agent (orders start as early as possible, no ice strategy) and once with our agent. Hover any chart to compare both at the same moment.') + `
+  <div class="cmp-sum">
+    ${tile('Energy cost', n0(sum.cost_aed), n0(bs.cost_aed), 'AED', dl(sum.cost_aed, bs.cost_aed, 'AED'))}
+    ${tile('Peak demand', n0(pk), n0(bpk), 'kW', dl(pk, bpk, 'kW') + ` · demand charge ${dl(pk * dpk, bpk * dpk, 'AED/day')}`)}
+    ${tile('Hottest floor', n1(fmax), n1(bfmax), '°C', 'limit 27 °C')}
+    ${tile('Grid energy', n0(sum.grid_kwh), n0(bs.grid_kwh), 'kWh', dl(sum.co2_kg, bs.co2_kg, 'kg CO₂'))}
+  </div>
+  <div class="readout" id="readout">Hover a chart to read both runs at the same time.</div>
+  ${['grid', 'cost', 'temp'].map(r => `<div class="cmp-row">${['b', 'a'].map(side => `<div class="panel"><div class="side-h"><span class="sw" style="background:${side === 'b' ? 'var(--base)' : 'var(--accent)'}"></span><h3>${{ grid: 'Grid power', cost: 'Cost so far', temp: 'Floor temperature' }[r]} · ${side === 'b' ? 'without agent' : 'with agent'}</h3></div><div id="cmp-${r}-${side}"></div></div>`).join('')}</div>`).join('')}
+  <p class="foot">The organisers' official baseline for this day is ${n0(off.baseline_cost_aed)} AED with a ${n0(off.baseline_peak_kw)} kW peak. The saving on the scorecard (${n1(sum.saving_pct)}%) is measured against that figure. The do-nothing run shown here is our replay in the same simulator, so you can see the hour-by-hour difference${Math.abs((bs.cost_aed || 0) - (off.baseline_cost_aed || 0)) / (off.baseline_cost_aed || 1) > 0.03 ? `. On this day our replay (${n0(bs.cost_aed)} AED) differs from the official baseline because the organisers' baseline schedules the presses differently` : `; it lands within ${n1(Math.abs((bs.cost_aed || 0) - (off.baseline_cost_aed || 0)) / (off.baseline_cost_aed || 1) * 100)}% of the official figure`}.</p>`;
+  const gmax = Math.max(bpk, pk, CAP) * 1.05, cmax = Math.max(m.cum[95], m.b_cum[95]) * 1.05;
+  const tipG = i => `<b>${hm(i)}</b><br>Without agent ${n0(m.b_grid_kw[i])} kW<br>With agent ${n0(m.grid_kw[i])} kW`;
+  chart($('#cmp-grid-b'), { label: 'Grid power without agent', h: 220, ymax: gmax, ymin: 0, series: [{ v: m.b_grid_kw, color: 'var(--base)', area: true, w: 2 }], hl: [{ y: CAP, label: 'peak limit', color: 'var(--peak)' }], marks: [{ i: bpki, v: bpk, label: `peak ${n0(bpk)} kW`, color: 'var(--bad)' }], tip: tipG });
+  chart($('#cmp-grid-a'), { label: 'Grid power with agent', h: 220, ymax: gmax, ymin: 0, series: [{ v: m.grid_kw, color: 'var(--accent)', area: true, w: 2 }], hl: [{ y: CAP, label: 'peak limit', color: 'var(--peak)' }], marks: [{ i: pki, v: pk, label: `peak ${n0(pk)} kW`, color: 'var(--bad)' }], tip: tipG });
+  const tipC = i => `<b>${hm(i)}</b><br>Without agent ${n0(m.b_cum[i])} AED<br>With agent ${n0(m.cum[i])} AED<br>Saved so far ${n0(m.b_cum[i] - m.cum[i])} AED`;
+  chart($('#cmp-cost-b'), { label: 'Cost without agent', h: 200, ymin: 0, ymax: cmax, series: [{ v: m.b_cum, color: 'var(--base)', w: 2.2 }], tip: tipC });
+  chart($('#cmp-cost-a'), { label: 'Cost with agent', h: 200, ymin: 0, ymax: cmax, series: [{ v: m.b_cum, color: 'var(--base)', w: 1, dash: '3 3' }, { v: m.cum, color: 'var(--accent)', w: 2.2 }], tip: tipC });
+  const tipT = i => `<b>${hm(i)}</b><br>Without agent ${n1(m.b_floor_c[i])} °C<br>With agent ${n1(m.floor_c[i])} °C`;
+  const tb = [{ a: 0, b: 96, y0: 20, y1: 27, fill: 'var(--ok)', op: .08, label: 'allowed 20–27 °C' }];
+  chart($('#cmp-temp-b'), { label: 'Floor temperature without agent', h: 180, ymin: 18, ymax: 30, step: 2, fmt: v => v + '°', bands: tb, series: [{ v: m.b_floor_c, color: 'var(--base)', w: 2.2 }], tip: tipT });
+  chart($('#cmp-temp-a'), { label: 'Floor temperature with agent', h: 180, ymin: 18, ymax: 30, step: 2, fmt: v => v + '°', bands: tb, series: [{ v: m.floor_c, color: 'var(--accent)', w: 2.2 }], tip: tipT });
+};
+viewCompare.update = (sc, m, i) => { if (S.hover == null) readout(i); };
+function readout(i) {
+  const sc = scen(), m = model(sc), j = i == null ? S.i : i, el = $('#readout'); if (!el) return;
+  el.innerHTML = `${hm(j)} · grid <b>${n0(m.b_grid_kw[j])}</b> → <b>${n0(m.grid_kw[j])}</b> kW · cost so far <b>${n0(m.b_cum[j])}</b> → <b>${n0(m.cum[j])}</b> AED (saved ${n0(m.b_cum[j] - m.cum[j])}) · floor <b>${n1(m.b_floor_c[j])}</b> → <b>${n1(m.floor_c[j])}</b> °C`;
+}
+
+// ===== 5. Decision timeline
+const EVT = {
+  chiller_trip: e => `Chiller ${e.chiller} stopped working`, chiller_recovered: e => `Chiller ${e.chiller} is back`, new_order: e => `New ${e.priority === 'rush' ? 'rush ' : ''}order ${e.order} (due ${String(e.due_hour).padStart(2, '0')}:00)`,
+  order_cancelled: e => `Order ${e.order} was cancelled`, forecast_deviation: e => `Weather ${e.dT > 0 ? '+' : ''}${e.dT} °C off the forecast`, floor_high: e => `Floor warm: ${e.floor} °C`,
+  demand_response: e => `Utility request: keep grid ≤ ${n0(e.cap_kw)} kW (${e.window})`, sensor_fault: e => `Bad sensor data: ${String(e.detail || '').replace(/_/g, ' ').slice(0, 90)}`, invalid_order: e => `Suspicious order ${e.order}: ${e.problems}`,
+  order_infeasible: e => `Order(s) ${(e.orders || []).join(', ')} cannot finish on time`, validation_failed: () => 'Plan failed the rule check', error: () => 'Unexpected data error', safety_override: e => `Cooling looked short (need ~${n0(e.load)} kW)`
+};
+const evText = e => (EVT[e.type] || (x => x.type))(e);
+const aiText = a => { const d = a.decision || (typeof a.answer === 'object' ? a.answer : null); if (!d) return `answer rejected (${a.note || 'not valid JSON'})`; return `${d.strategy}${d.strategy === 'conservative' ? ` (≥${Math.round(d.min_margin * 100)}% margin)` : ''} – ${d.reason}${a.applied ? '' : d.strategy === 'conservative' ? '' : ''}`; };
+const cmdText = c => c.tool === 'set_chiller_state' ? `${c.args.chiller_id} ${c.args.state}` : c.tool === 'set_storage_mode' ? `ice ${c.args.mode}${c.args.mode === 'idle' ? '' : ' ' + n0(c.args.rate_kwth) + ' kW'}` : c.tool === 'schedule_batch' ? `${c.args.order_id} → ${c.args.press_id} at ${String(c.args.start_time).slice(11, 16)}` : c.tool;
+function viewTimeline() {}
+viewTimeline.render = () => {
+  const sc = scen(), m = model(sc), W = 1100, pl = 150, pr = 16, lane = 46, top = 26, H = top + 4 * lane + 26;
+  const X = k => pl + k / 96 * (W - pl - pr);
+  const lanes = ['Detected', 'AI recommended', 'Safety check', 'Action executed'], colors = ['var(--peak)', 'var(--accent)', 'var(--ok)', 'var(--ice)'];
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="lanes" role="img" aria-label="Decision timeline"><rect x="${X(48)}" y="${top - 10}" width="${X(72) - X(48)}" height="${4 * lane + 6}" fill="var(--peakbg)"/>`;
+  for (const h of [0, 3, 6, 9, 12, 15, 18, 21, 24]) s += `<line x1="${X(h * 4)}" x2="${X(h * 4)}" y1="${top - 10}" y2="${top + 4 * lane - 4}" stroke="var(--line)"/><text x="${X(h * 4)}" y="${H - 6}" text-anchor="middle" style="font-family:var(--f-mono);font-size:11px;fill:var(--ink3)">${String(h).padStart(2, '0')}:00</text>`;
+  lanes.forEach((l, r) => { const y = top + r * lane + 14; s += `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="2 4"/><text class="ln" x="10" y="${y + 4}">${l}</text>`; });
+  for (const t of m.trace) {
+    const x = X(t.k), inc = (t.events || []).some(e => e.type !== 'safety_override') || t.ai, y = r => top + r * lane + 14;
+    if ((t.events || []).some(e => e.type !== 'safety_override')) s += `<circle class="mk" data-k="${t.k}" cx="${x}" cy="${y(0)}" r="8" fill="${colors[0]}"><title>${esc(t.t)} ${esc(t.events.filter(e => e.type !== 'safety_override').map(evText).join('; '))}</title></circle>`;
+    if (t.ai) s += `<rect class="mk" data-k="${t.k}" x="${x - 8}" y="${y(1) - 8}" width="16" height="16" rx="3" transform="rotate(45 ${x} ${y(1)})" fill="${colors[1]}"><title>${esc(t.t)} AI: ${esc(aiText(t.ai))}</title></rect>`;
+    const so = (t.events || []).some(e => e.type === 'safety_override');
+    if (t.validation || so) s += `<circle class="mk" data-k="${t.k}" cx="${x}" cy="${y(2)}" r="${inc || so ? 7 : 3.5}" fill="${t.validation && !t.validation.ok ? 'var(--bad)' : so ? 'var(--warn)' : colors[2]}"><title>${esc(t.t)} ${so ? 'safety layer added cooling' : t.validation.ok ? 'plan passed every rule' : 'plan rejected'}</title></circle>`;
+    if ((t.cmds || []).length) s += `<rect class="mk" data-k="${t.k}" x="${x - 2}" y="${y(3) - 2 - Math.min(10, t.cmds.length * 3)}" width="4" height="${4 + Math.min(20, t.cmds.length * 6)}" rx="2" fill="${t.cmds.some(c => !c.ok) ? 'var(--bad)' : colors[3]}"><title>${esc(t.t)} ${esc(t.cmds.map(cmdText).join(', '))}</title></rect>`;
+  }
+  s += `<line class="phl" id="tl-ph" x1="0" x2="0" y1="${top - 10}" y2="${top + 4 * lane - 4}" style="stroke:var(--ink);stroke-width:1.5"/></svg>`;
+  $('#main').innerHTML = head('Decision Timeline', 'Every decision in four steps: what the agent noticed, what the AI advised, what the safety checker approved and which commands went to the plant. The AI is only asked on unusual events; routine hours are planned without it.') + `
+  <div class="panel"><div style="overflow-x:auto">${s}</div><div class="leg2" style="margin-top:6px"><span class="muted small">Big marks are incidents, small green dots are the routine hourly re-plans. Orange means the 15-minute safety layer added cooling; red means a rejected plan or a failed command. Click a mark for the full chain.</span></div></div>
+  <div class="panel" style="margin-top:14px"><div class="ph"><h3 id="ch-h">Decision chain</h3><span class="mono muted small" id="ch-t"></span></div><div class="chain" id="chain"></div></div>
+  <div class="ph" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="font-size:20px">Decision log</h3><div class="filters"><button class="fbtn" data-f="inc" aria-pressed="${S.tlFilter === 'inc'}">Incidents</button><button class="fbtn" data-f="all" aria-pressed="${S.tlFilter === 'all'}">Every decision</button></div></div>
+  <div class="tl-list" id="tl-list"></div>`;
+  tl.X = X;
+  document.querySelectorAll('.lanes .mk').forEach(el => el.addEventListener('click', () => { S.tlSel = +el.dataset.k; seek(clamp(S.tlSel, 0, 95)); }));
+  document.querySelectorAll('.fbtn').forEach(b => b.onclick = () => { S.tlFilter = b.dataset.f; document.querySelectorAll('.fbtn').forEach(x => x.setAttribute('aria-pressed', x === b)); tlList(); });
+  tlList();
+};
+function tl() {}
+function tlList() {
+  const sc = scen(), m = model(sc);
+  const rows = (S.tlFilter === 'inc' ? m.inc : m.trace.filter(t => t.validation || (t.events || []).length || t.ai || (t.cmds || []).length));
+  $('#tl-list').innerHTML = rows.map(t => { const c = chainParts(sc, t); return `<button class="tl-item" data-k="${t.k}"><span class="t">${esc(t.t)}</span><span class="s"><span><b>Detected</b>${esc(c.det)}</span><span><b>AI</b>${esc(c.ai)}</span><span><b>Safety check</b>${esc(c.val)}</span><span><b>Executed</b>${esc(c.exe)}</span></span></button>`; }).join('') || '<div class="muted">No incidents on this day. Switch to “Every decision” to see the hourly re-plans.</div>';
+  document.querySelectorAll('.tl-item').forEach(b => b.onclick = () => { S.tlSel = +b.dataset.k; seek(clamp(S.tlSel, 0, 95)); scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); });
+}
+function chainParts(sc, t) {
+  const ev = (t.events || []).filter(e => e.type !== 'safety_override'), so = (t.events || []).find(e => e.type === 'safety_override');
+  const det = ev.length ? ev.map(evText).join('; ') : (t.k % 4 === 0 ? 'Hourly check: nothing unusual' : 'Routine 15-minute check');
+  const ai = t.ai ? aiText(t.ai) + (t.ai.applied ? ' (applied)' : t.ai.decision && t.ai.decision.strategy === 'escalate' ? ' (sent to a human)' : t.ai.decision ? ' (no plan change needed)' : '') : (ev.length ? 'Not asked (AI is used only for listed unusual events)' : 'Not needed – routine hour');
+  const val = t.validation ? (t.validation.ok ? `Plan passed: 20–27 °C with +1 °C stress, every order on time, a backup chiller kept${t.margin != null ? `, ${Math.round(t.margin * 100)}% cooling margin` : ''}` : 'Plan rejected: ' + (t.validation.violations || []).join('; ')) + (so ? `. Safety layer: +cooling (need ~${n0(so.load)} kW)` : '') : so ? `Safety layer added cooling (need ~${n0(so.load)} kW)` : 'Kept the last checked plan';
+  const exe = (t.cmds || []).length ? t.cmds.map(c => cmdText(c) + (c.ok ? '' : ` (failed: ${c.error})`)).join(', ') : 'No change needed';
+  return { det, ai, val, exe };
+}
+viewTimeline.update = (sc, m, i) => {
+  const l = $('#tl-ph'); if (l) { const x = tl.X(i + 1); l.setAttribute('x1', x); l.setAttribute('x2', x); }
+  const k = S.tlSel != null ? S.tlSel : (m.inc.filter(t => t.k <= i + 1).slice(-1)[0] || m.trace.filter(t => t.k <= i + 1 && t.validation).slice(-1)[0] || m.trace[0]).k;
+  const t = m.trace.find(x => x.k === k) || m.trace[0];
+  document.querySelectorAll('.lanes .mk').forEach(el => el.classList.toggle('sel', +el.dataset.k === t.k));
+  const c = chainParts(sc, t);
+  $('#ch-t').textContent = t.t; $('#ch-h').textContent = 'Decision chain';
+  const step = (cls, n, b, none) => `<div class="step ${cls} ${none ? 'none' : ''}"><div class="n">${n}</div><div class="body">${esc(b)}</div></div>`;
+  $('#chain').innerHTML = step('detect', '1 · Detected', c.det) + step('ai', '2 · AI recommended', c.ai, !t.ai) + step('val', '3 · Safety check approved', c.val) + step('exe', '4 · Action executed', c.exe);
+  if (S.tlSel != null && Math.abs(S.tlSel - (i + 1)) > 1 && Math.abs(S.tlSel - i) > 1) S.tlSel = null;
+};
+
+// ------------------------------------------------------------ live mode
+async function detectLive() {
+  // same origin (served by the bridge) first, then the default bridge port (page opened from VS Code Live Server or a file)
+  const bases = [];
+  if (/^https?:$/.test(location.protocol)) bases.push('');
+  bases.push('http://localhost:8765');
+  for (const base of bases) {
+    try {
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 1500);
+      const r = await fetch(base + '/health', { signal: ctl.signal }); const j = await r.json();
+      if (j && j.ok && typeof CORE !== 'undefined' && typeof RUNNER !== 'undefined') {
+        S.live = { faults: !!j.faults, base };
+        const b = $('#mode'); b.classList.add('live'); b.lastElementChild.textContent = j.faults ? 'Live simulator connected' : 'Live simulator connected (no fault injector)';
+        if (S.view === 'whatif') render();
+        return;
+      }
+    } catch (e) { /* try the next one; replay only if none answers */ }
+  }
+}
+
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { const c = S.charts[0]; if (c && Math.abs(+c.svg.parentElement.dataset.w - c.svg.parentElement.clientWidth) > 40) render(); }, 200); });
+fillScenarioSelect();
+route();
+detectLive();
+})();
+</script>

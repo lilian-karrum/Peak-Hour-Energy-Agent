@@ -1,0 +1,346 @@
+{
+  "id": "PHEATestRunner01",
+  "name": "Peak Hour Energy Agent - Test Runner",
+  "nodes": [
+    {
+      "id": "manual_trigger_0",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "settings_1",
+      "name": "Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Settings passed to every Day Agent run (override any Config field here).\nreturn [{ json: { api_base: 'http://localhost:8765', use_ai: false, write_sheets: false, sheet_id: '', require_approval: false } }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bridge_day_list_2",
+      "name": "Bridge Day List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.api_base }}/days",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "days_to_run_3",
+      "name": "Days to Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Days come from the bridge (python server.py --days hidden_01,hidden_02,hidden_03 or run_competition.py);\n// if it sends none, the six practice days are run.\nconst common = $('Settings').first().json;\nlet days = []; try { days = ($input.first().json || {}).days || []; } catch (e) {}\nif (!Array.isArray(days) || !days.length) days = ['practice_01', 'practice_02', 'practice_03', 'practice_04', 'practice_05', 'practice_06'];\nreturn days.map(day => ({ json: { ...common, day: String(day).replace(/[^A-Za-z0-9_-]/g, '') } }));"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "loop_days_4",
+      "name": "Loop Days",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "run_day_agent_5",
+      "name": "Run Day Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        420
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PHEADayAgent0001"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "simulator_score__run_summary_6",
+      "name": "Simulator Score (run_summary)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Settings').first().json.api_base }}/summary?day={{ $('Loop Days').first().json.day }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "combine_result_7",
+      "name": "Combine Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        420
+      ],
+      "parameters": {
+        "jsCode": "const r = $('Run Day Agent').first().json || {}, s = $input.first().json || {}, day = $('Loop Days').first().json.day;\nconst v = (s.violations || []).length, late = (s.late_orders || []).length;\nreturn [{ json: { day, day_type: r.day_type, energy_cost_aed: r.energy_cost_aed, baseline_energy_cost_aed: r.baseline_energy_cost_aed, energy_saving_pct: r.energy_saving_pct,\n  demand_charge_aed: r.demand_charge_aed, total_cost_aed: r.total_cost_aed, baseline_total_cost_aed: r.baseline_total_cost_aed, total_saving_pct: r.total_saving_pct,\n  peak_kw: r.peak_kw, baseline_peak_kw: r.baseline_peak_kw, grid_kwh: r.grid_kwh, baseline_grid_kwh: r.baseline_grid_kwh, co2_kg: r.co2_kg, baseline_co2_kg: r.baseline_co2_kg,\n  comfort_violation_min: r.comfort_violation_min, floor_max_c: r.floor_max_c, late_orders: r.late_orders, chiller_trips: r.chiller_trips, sensor_faults: r.sensor_faults,\n  escalations: r.escalations, replans: r.replans, safety_overrides: r.safety_overrides, ai_calls: r.ai_calls, what_if_choice: r.what_if_choice, demand_response: r.demand_response,\n  safe_mode_used: r.safe_mode_used, sim_cost_aed: s.cost_aed, sim_saving_pct: s.saving_pct, sim_peak_kw: s.peak_kw, sim_violations: v, sim_comfort_min: s.comfort_violation_minutes,\n  sim_late_orders: late, pass: !s.error && v === 0 && s.comfort_violation_minutes === 0 && late === 0, schedule: r.schedule, alerts: r.alerts } }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "write_to_sheets__8",
+      "name": "Write to Sheets?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "WritetoSheets",
+              "leftValue": "={{ $('Settings').first().json.write_sheets && !!$('Settings').first().json.sheet_id }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "google_sheets__test_results_9",
+      "name": "Google Sheets: Test_Results",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1320,
+        60
+      ],
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Settings').first().json.sheet_id }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Test_Results"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "results_table_10",
+      "name": "Results Table",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        160
+      ],
+      "parameters": {
+        "jsCode": "return $('Loop Days').all(0);"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Bridge Day List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bridge Day List": {
+      "main": [
+        [
+          {
+            "node": "Days to Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Days to Run": {
+      "main": [
+        [
+          {
+            "node": "Loop Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Days": {
+      "main": [
+        [
+          {
+            "node": "Write to Sheets?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Day Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Day Agent": {
+      "main": [
+        [
+          {
+            "node": "Simulator Score (run_summary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulator Score (run_summary)": {
+      "main": [
+        [
+          {
+            "node": "Combine Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Result": {
+      "main": [
+        [
+          {
+            "node": "Loop Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Sheets?": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Test_Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Results Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets: Test_Results": {
+      "main": [
+        [
+          {
+            "node": "Results Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
