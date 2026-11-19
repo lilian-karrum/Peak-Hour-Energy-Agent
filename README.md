@@ -1,7 +1,6 @@
 # Peak Hour Energy Agent
 
 **AgentX@CCI 2026 · Problem 3 – The Peak-Hour Energy Agent**
-Senior Design Group: Amina Aldarwish, Hanane ElTannir, Lilian Karrum · Supervisor: Dr. Ahcene Bounceur
 Department of Computer Science, College of Computing and Informatics, University of Sharjah
 
 An n8n agent that plans and runs an aluminium-extrusion plant's cooling (4 chillers + ice tank) and press batches so it buys less electricity in the 12:00–18:00 peak, while **never** breaking the three hard rules:
